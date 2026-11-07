@@ -1,7 +1,4 @@
-﻿// ==========================================================================
-// PORTAL RBS — CONTROLADOR DE RELATÓRIOS (POWER BI + MODELO EXCEL MULTI-ABAS + PDF COMPACTO)
-// ==========================================================================
-const ORDEM_MESES = ["Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro"];
+﻿const ORDEM_MESES = ["Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro"];
 const ORDEM_VEICULOS = ["Instagram", "X", "TikTok", "Rádio", "Jornais", "Televisão"];
 
 const CORES_VEICULOS = {
@@ -31,6 +28,9 @@ function extrairDadosEstruturadosDoRelatorio(relatorio) {
     const respostasPerguntas = {};
     let resumoAtivacao = { entrevistados: 0, alcanceAtivacao: 0 };
 
+
+    const mapaMidiaUnica = new Map();
+
     indicadores.forEach(ind => {
         const secao = String(ind.secao || "").toUpperCase();
         const nome = String(ind.nomeIndicador || "");
@@ -42,7 +42,7 @@ function extrairDadosEstruturadosDoRelatorio(relatorio) {
             const visualizacoes = Number(kv.visualizacoes || ind.valorNumerico || 0);
             const alcance = Number(kv.alcance || Math.round(visualizacoes * 0.78));
             if (veiculacoes > 0 || visualizacoes > 0 || alcance > 0) {
-                midiaMensal.push({ mes, veiculo, veiculacoes, visualizacoes, alcance });
+                mapaMidiaUnica.set(`${mes}|${veiculo}`, { mes, veiculo, veiculacoes, visualizacoes, alcance });
             }
         } else if (secao === "ATIVACAO_RESUMO") {
             resumoAtivacao = {
@@ -52,11 +52,14 @@ function extrairDadosEstruturadosDoRelatorio(relatorio) {
         } else if (secao === "ATIVACAO_DEMOGRAFIA" && nome.includes("|")) {
             const [grupo, rotulo] = nome.split("|").map(s => s.trim());
             if (demografia[grupo]) {
-                demografia[grupo].push({
+                const idxExistente = demografia[grupo].findIndex(x => x.rotulo === rotulo);
+                const novoItem = {
                     rotulo,
                     percentual: Number(kv.percentual || ind.valorNumerico || 0),
                     quantidade: Number(kv.quantidade || 0)
-                });
+                };
+                if (idxExistente >= 0) demografia[grupo][idxExistente] = novoItem;
+                else demografia[grupo].push(novoItem);
             }
         } else if (secao === "ATIVACAO_PERGUNTA") {
             const num = Number(nome.replace("PERGUNTA_", "")) || 1;
@@ -67,7 +70,10 @@ function extrairDadosEstruturadosDoRelatorio(relatorio) {
         }
     });
 
-    if (midiaMensal.length === 0 && indicadores.length > 0) {
+    mapaMidiaUnica.forEach(val => midiaMensal.push(val));
+
+    const indicadoresReais = indicadores.filter(i => i.secao !== "SISTEMA_CONFIG");
+    if (midiaMensal.length === 0 && indicadoresReais.length > 0) {
         const fator = String(relatorio.cota).toUpperCase() === "MASTER" ? 3 : (String(relatorio.cota).toUpperCase() === "SUB_COTA_G" ? 2 : 1);
         const pesos = [0.75, 0.9, 1.15, 1.45, 1.85];
         const base = [
@@ -116,10 +122,6 @@ function extrairDadosEstruturadosDoRelatorio(relatorio) {
     return { midiaMensal, resumoAtivacao, demografia, respostasPerguntas };
 }
 
-/**
- * Gera um arquivo Excel (.xls SpreadsheetML) com as 6 abas (Outubro, Novembro, Dezembro, Janeiro, Fevereiro e Ativação Master)
- * exatamente igual à estrutura de colunas por patrocinador (Veiculo | Metrica | Coca-Cola | Renner | Banrisul...).
- */
 function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
     const todasMarcas = marcas.length > 0
         ? marcas.map(m => m.nome)
@@ -241,6 +243,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const exportPdfButton = document.getElementById("exportStandardPdfButton");
     const adminTemplateActions = document.getElementById("adminTemplateActions");
     const btnBaixarPlanilhaModelo = document.getElementById("btnBaixarPlanilhaModelo");
+    const btnImportarGeral = document.getElementById("btnImportarPlanilhaGeral");
+    const inputPlanilhaGeral = document.getElementById("inputPlanilhaGeralUnica");
 
     const alertaBanner = document.getElementById("alertaDisponibilidadeRelatorio");
     const alertaTitulo = document.getElementById("alertaTituloMarca");
@@ -292,7 +296,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             alertaBanner.hidden = false;
             const ehMaster = String(marca.cota).toUpperCase() === "MASTER";
-            alertaTitulo.textContent = `Notificação de Dados Disponíveis — ${marca.nome}`;
+            alertaTitulo.textContent = `Notificação de Dados Disponíveis: ${marca.nome}`;
             alertaDetalhe.textContent = `Dados de veiculação auditados disponíveis para ${mesesDisponiveis.length} mês(es) da campanha${ehMaster ? " + Pesquisa de Ativação Master" : ""}.`;
 
             alertaBadges.replaceChildren();
@@ -375,8 +379,122 @@ document.addEventListener("DOMContentLoaded", async () => {
         inputs.forEach(i => { i.checked = !todosMarcados; });
     });
 
-    btnBaixarPlanilhaModelo?.addEventListener("click", () => {
-        baixarPlanilhaExcelPadraoMultiAbas(marcasCarregadas);
+    btnImportarGeral?.addEventListener("click", () => inputPlanilhaGeral?.click());
+
+    inputPlanilhaGeral?.addEventListener("change", async () => {
+        const arquivo = inputPlanilhaGeral.files?.[0];
+        if (!arquivo) return;
+        if (typeof XLSX === "undefined") {
+            alert("Aguarde 2 segundos para o leitor Excel carregar e tente novamente.");
+            return;
+        }
+        btnImportarGeral.disabled = true;
+        btnImportarGeral.textContent = "Importando dados...";
+        try {
+            const buffer = await arquivo.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: "array" });
+
+            const mapaMarcasPorNome = {};
+            marcasCarregadas.forEach(m => {
+                mapaMarcasPorNome[String(m.nome || "").trim().toLowerCase()] = m;
+            });
+
+            const dadosPorMarcaId = {};
+            const normalizarVeiculo = (v) => {
+                const limpo = String(v || "").trim().toLowerCase();
+                if (limpo.includes("insta")) return "Instagram";
+                if (limpo === "x" || limpo.includes("twitter")) return "X";
+                if (limpo.includes("tik")) return "TikTok";
+                if (limpo.includes("rad") || limpo.includes("rád")) return "Rádio";
+                if (limpo.includes("jorn")) return "Jornais";
+                if (limpo.includes("tele") || limpo === "tv") return "Televisão";
+                return null;
+            };
+
+            ORDEM_MESES.forEach(mes => {
+                const nomeAba = workbook.SheetNames.find(
+                    s => s.trim().toLowerCase() === mes.toLowerCase()
+                );
+                if (!nomeAba) return;
+                const linhas = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba], { defval: "" });
+                const acumuladorMesMarcaVeiculo = {};
+
+                linhas.forEach(row => {
+                    const chaves = Object.keys(row);
+                    const colVeiculo = chaves.find(k => k.toLowerCase().includes("veic"));
+                    const colMetrica = chaves.find(k => k.toLowerCase().includes("metr") || k.toLowerCase().includes("métr"));
+                    if (!colVeiculo || !colMetrica) return;
+
+                    const veiculoPadrao = normalizarVeiculo(row[colVeiculo]);
+                    if (!veiculoPadrao) return;
+
+                    const metricaStr = String(row[colMetrica] || "").toLowerCase();
+                    let campoMetrica = null;
+                    if (metricaStr.includes("veic")) campoMetrica = "veiculacoes";
+                    else if (metricaStr.includes("visu")) campoMetrica = "visualizacoes";
+                    else if (metricaStr.includes("alcan")) campoMetrica = "alcance";
+                    if (!campoMetrica) return;
+
+                    chaves.forEach(col => {
+                        if (col === colVeiculo || col === colMetrica) return;
+                        const marca = mapaMarcasPorNome[col.trim().toLowerCase()];
+                        if (!marca) return;
+
+                        const num = Number(String(row[col]).replace(/\./g, "").replace(",", "."));
+                        if (Number.isNaN(num) || num <= 0) return;
+
+                        const chaveUnica = `${marca.id}|${mes}|${veiculoPadrao}`;
+                        if (!acumuladorMesMarcaVeiculo[chaveUnica]) {
+                            acumuladorMesMarcaVeiculo[chaveUnica] = {
+                                marcaId: marca.id,
+                                mes,
+                                veiculo: veiculoPadrao,
+                                veiculacoes: 0,
+                                visualizacoes: 0,
+                                alcance: 0
+                            };
+                        }
+                        acumuladorMesMarcaVeiculo[chaveUnica][campoMetrica] = num;
+                    });
+                });
+
+                Object.values(acumuladorMesMarcaVeiculo).forEach(item => {
+                    if (item.veiculacoes > 0 || item.visualizacoes > 0 || item.alcance > 0) {
+                        if (!dadosPorMarcaId[item.marcaId]) dadosPorMarcaId[item.marcaId] = [];
+                        dadosPorMarcaId[item.marcaId].push({
+                            secao: "MIDIA_MENSAL",
+                            nomeIndicador: `${item.mes}|${item.veiculo}`,
+                            valorNumerico: item.visualizacoes,
+                            valorTexto: `veiculacoes=${item.veiculacoes};visualizacoes=${item.visualizacoes};alcance=${item.alcance}`,
+                            fonteDados: `Planilha Geral (${arquivo.name})`
+                        });
+                    }
+                });
+            });
+
+            const marcasContempladas = [];
+            for (const [marcaId, listaIndicadores] of Object.entries(dadosPorMarcaId)) {
+                if (listaIndicadores.length === 0) continue;
+                const marcaObj = marcasCarregadas.find(m => String(m.id) === String(marcaId));
+                if (marcaObj) marcasContempladas.push(marcaObj.nome);
+                for (const ind of listaIndicadores) {
+                    await apiRequest(`/marcas/${marcaId}/indicadores`, "POST", ind).catch(() => { });
+                }
+            }
+
+            if (marcasContempladas.length === 0) {
+                alert("Nenhuma coluna preenchida de patrocinador cadastrado foi encontrada na planilha.");
+            } else {
+                alert(`Planilha Geral importada com sucesso! Dados atualizados para: ${marcasContempladas.join(", ")}.`);
+                await atualizarAlertaDisponibilidadeDaMarca();
+            }
+        } catch (erro) {
+            alert(erro.message || "Erro ao ler a planilha geral.");
+        } finally {
+            btnImportarGeral.disabled = false;
+            btnImportarGeral.textContent = "Importar Planilha Geral";
+            inputPlanilhaGeral.value = "";
+        }
     });
 
     await carregarPatrocinadores();
@@ -730,7 +848,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
             }
 
-            // Títulos limpos sem travessão conforme solicitado
             const mapTitulos = {
                 "VOLUMETRIA_MIDIA": `Relatório de Volumetria de Entrega e Impacto ${relatorio.marcaNome}`,
                 "ATIVACAO_EVENTO": `Relatório de Ativações do Evento ${relatorio.marcaNome}`,
@@ -746,7 +863,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const agora = new Date();
             const dataEmissaoUnicaLinha = `${agora.toLocaleDateString("pt-BR")} às ${agora.toLocaleTimeString("pt-BR")}`;
 
-            // Cabeçalho com Título em uma linha e "Emitido em" na linha de baixo alinhado na mesma altura das infos do patrocinador/evento
             const mioloRelatorio = `
                 <div class="pbi-top-bar">
                     <div class="pbi-brand-identity">
@@ -781,7 +897,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Exportador de Documento PDF Padronizado e Compacto (Sem buracos em branco entre páginas e sem quebrar datas)
     function exportarDocumentoPdfPadronizado() {
         if (!ultimoRelatorioGeradoHtmlPdf) {
             alert("Gere o painel de dados antes de baixar o PDF.");

@@ -1,8 +1,3 @@
-/**
- * ==========================================================================
- * PORTAL RBS — CONTROLADOR DE FAQ (RESPOSTAS EM DROPDOWN + EDIÇÃO + ACESSOS DE PATROCINADORES)
- * ==========================================================================
- */
 document.addEventListener("DOMContentLoaded", async function () {
     const sessao = JSON.parse(localStorage.getItem("rbs_sessao") || "null");
     if (!sessao) return;
@@ -63,7 +58,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         message.classList.toggle("is-error", Boolean(isError));
     }
 
-    // Card de Pergunta Pendente (Apenas na seção "Perguntas recebidas" do Admin)
+
     function criarItemPerguntaRecebida(item) {
         const wrapper = document.createElement("article");
         wrapper.className = "faq-dropdown-item";
@@ -143,7 +138,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         return wrapper;
     }
 
-    // Item de Resposta Publicada: Linha com Dropdown (borda cinza) e Resposta interna (borda laranja)
+
     function criarItemRespostaPublicada(item) {
         const itemBox = document.createElement("article");
         itemBox.className = "faq-dropdown-item";
@@ -158,7 +153,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         const meta = document.createElement("div");
         meta.className = "faq-dropdown-meta";
 
-        // Contador de acessos aparece SOMENTE para os administradores
+
         let badgeAcessos = null;
         if (isAdmin) {
             badgeAcessos = document.createElement("span");
@@ -270,7 +265,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             content.append(controls, formEdicao);
         }
 
-        // Ao abrir o dropdown, exibe a resposta e contabiliza acesso SOMENTE se for Patrocinador (!isAdmin)
+
         trigger.addEventListener("click", async () => {
             const vaiAbrir = content.hidden;
             content.hidden = !vaiAbrir;
@@ -281,7 +276,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 try {
                     await apiRequest(`/faq/${item.id}`, "GET");
                 } catch {
-                    // Silencioso
+
                 }
             }
         });

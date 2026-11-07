@@ -1,9 +1,19 @@
-﻿/**
- * ==========================================================================
- * PORTAL RBS — COMPONENTE UNIFICADO DE LAYOUT + MODAL DE 1º ACESSO + ALERTAS
- * ==========================================================================
- */
-const PRAZO_PESQUISA_KEY = "rbs_pesquisa_data_limite";
+﻿const PRAZO_PESQUISA_KEY = "rbs_pesquisa_data_limite";
+const NOTIFS_LIDAS_KEY = "rbs_notificacoes_lidas";
+
+function obterNotificacoesLidas() {
+    try {
+        return JSON.parse(localStorage.getItem(NOTIFS_LIDAS_KEY) || "[]");
+    } catch {
+        return [];
+    }
+}
+
+function marcarNotificacoesComoLidas(ids) {
+    const atuais = new Set(obterNotificacoesLidas());
+    ids.forEach(id => atuais.add(id));
+    localStorage.setItem(NOTIFS_LIDAS_KEY, JSON.stringify([...atuais]));
+}
 
 function verificarEExibirModalPrimeiroAcesso(sessao) {
     if (!sessao || !sessao.precisaTrocarSenha) return;
@@ -95,70 +105,208 @@ function verificarEExibirModalPrimeiroAcesso(sessao) {
     });
 }
 
-async function verificarNotificacaoPrazoPesquisaMaster(sessao) {
+async function carregarNotificacoesDaPlataforma(sessao) {
+    if (typeof apiRequest !== "function" || !localStorage.getItem("rbs_token")) return [];
     const ehPatrocinador = String(sessao?.perfil || "").toLowerCase() === "patrocinador";
-    const ehMaster = String(sessao?.marcaCota || "").toUpperCase() === "MASTER";
-    if (!ehPatrocinador || !ehMaster || !sessao.patrocinadorId) return;
+    const notificacoes = [];
 
     try {
-        const [materiais, perguntas] = await Promise.all([
-            apiRequest(`/marcas/${sessao.patrocinadorId}/materiais`, "GET").catch(() => []),
-            apiRequest(`/marcas/${sessao.patrocinadorId}/pesquisa-perguntas`, "GET").catch(() => [])
-        ]);
+        if (ehPatrocinador && sessao.patrocinadorId) {
+            const marcaId = sessao.patrocinadorId;
+            const ehMaster = String(sessao.marcaCota || "").toUpperCase() === "MASTER";
 
-        // Se já enviou as 3 perguntas, não precisa exibir alerta de pendência
-        if ((perguntas || []).length >= 3) return;
+            const [relatorio, faqPublicadas] = await Promise.all([
+                apiRequest(`/marcas/${marcaId}/relatorio-consolidado`, "GET").catch(() => null),
+                apiRequest("/faq", "GET").catch(() => [])
+            ]);
 
-        const matPrazo = (materiais || []).find(m => m.tipoMaterial === "PRAZO_PESQUISA");
-        const dataIso = matPrazo?.descricao || localStorage.getItem(PRAZO_PESQUISA_KEY) || "";
-        if (!dataIso) return;
+            const materiais = relatorio?.materiaisEntregues || [];
+            const perguntas = relatorio?.perguntasPesquisa || [];
+            const indicadores = relatorio?.indicadoresConsolidados || [];
 
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-        const limite = new Date(dataIso + "T00:00:00");
-        if (Number.isNaN(limite.getTime())) return;
 
-        const diffDias = Math.round((limite - hoje) / (1000 * 60 * 60 * 24));
-        const dataFormatada = limite.toLocaleDateString("pt-BR");
-        const ultimoPrazoVisto = localStorage.getItem(`rbs_prazo_visto_${sessao.patrocinadorId}`);
-        const mudouDataLimite = ultimoPrazoVisto && ultimoPrazoVisto !== dataIso;
-        localStorage.setItem(`rbs_prazo_visto_${sessao.patrocinadorId}`, dataIso);
+            for (const m of materiais) {
+                if (m.tipoMaterial === "PRAZO_PESQUISA") {
+                    apiRequest(`/materiais/${m.id}`, "DELETE").catch(() => { });
+                }
+            }
 
-        let textoAlerta = "";
-        let urgente = false;
 
-        if (diffDias === 0) {
-            textoAlerta = `Atenção: Hoje (${dataFormatada}) é o dia limite para o envio das 3 perguntas da Pesquisa de Ativação da sua marca (${(perguntas || []).length}/3 enviadas).`;
-            urgente = true;
-        } else if (diffDias === 1) {
-            textoAlerta = `Aviso de Prazo: Falta 1 dia para encerrar o envio das perguntas da Pesquisa de Ativação (Data limite: ${dataFormatada}).`;
-            urgente = true;
-        } else if (diffDias === 7) {
-            textoAlerta = `Lembrete de Prazo: Faltam 7 dias para o envio das 3 perguntas da Pesquisa de Ativação (Data limite: ${dataFormatada}).`;
-        } else if (mudouDataLimite) {
-            textoAlerta = `Atualização: A data limite para envio das perguntas da Pesquisa de Ativação foi atualizada para ${dataFormatada}.`;
-        } else if (diffDias > 0 && diffDias < 7) {
-            textoAlerta = `Prazo da Pesquisa de Ativação: Faltam ${diffDias} dias (Data limite: ${dataFormatada} • ${(perguntas || []).length}/3 enviadas).`;
+            if (ehMaster) {
+                const indPrazo = indicadores.find(i => i.secao === "SISTEMA_CONFIG" && i.nomeIndicador === "PRAZO_PESQUISA");
+                const dataIso = indPrazo?.valorTexto || localStorage.getItem(PRAZO_PESQUISA_KEY) || "";
+                const qtdPerguntas = perguntas.length;
+
+                if (dataIso && qtdPerguntas < 3) {
+                    const hoje = new Date();
+                    hoje.setHours(0, 0, 0, 0);
+                    const limite = new Date(dataIso + "T00:00:00");
+                    if (!Number.isNaN(limite.getTime())) {
+                        const diffDias = Math.round((limite - hoje) / (1000 * 60 * 60 * 24));
+                        const dataBr = limite.toLocaleDateString("pt-BR");
+
+                        if (diffDias === 0) {
+                            notificacoes.push({
+                                id: `prazo_hoje_${dataIso}`,
+                                titulo: "Hoje é o dia limite da Pesquisa",
+                                descricao: `Envie as perguntas restantes da Pesquisa de Ativação até hoje (${dataBr}). Status atual: ${qtdPerguntas}/3.`,
+                                link: "indexPesquisa.html"
+                            });
+                        } else if (diffDias === 1) {
+                            notificacoes.push({
+                                id: `prazo_1d_${dataIso}`,
+                                titulo: "Falta 1 dia — Pesquisa de Ativação",
+                                descricao: `O prazo para cadastrar as 3 perguntas encerra amanhã (${dataBr}). Status: ${qtdPerguntas}/3.`,
+                                link: "indexPesquisa.html"
+                            });
+                        } else if (diffDias === 7) {
+                            notificacoes.push({
+                                id: `prazo_7d_${dataIso}`,
+                                titulo: "Faltam 7 dias — Pesquisa de Ativação",
+                                descricao: `Data limite definida para ${dataBr}. Você cadastrou ${qtdPerguntas}/3 perguntas.`,
+                                link: "indexPesquisa.html"
+                            });
+                        } else {
+                            notificacoes.push({
+                                id: `prazo_def_${dataIso}_${qtdPerguntas}`,
+                                titulo: "Prazo da Pesquisa de Ativação",
+                                descricao: `Data limite para envio das 3 perguntas: ${dataBr} (${qtdPerguntas}/3 cadastradas).`,
+                                link: "indexPesquisa.html"
+                            });
+                        }
+                    }
+                }
+            }
+
+
+            const temSignatario = materiais.some(m => m.tipoMaterial === "DADOS_SIGNATARIO");
+            const pdfContrato = materiais.find(m => m.tipoMaterial === "CONTRATO");
+
+            if (!temSignatario) {
+                notificacoes.push({
+                    id: `contrato_sem_signatario_${marcaId}`,
+                    titulo: "Contrato: Dados Pendentes",
+                    descricao: "Informe o nome e o cargo do representante legal que assinará o contrato da sua marca.",
+                    link: "indexContratos.html"
+                });
+            } else if (pdfContrato && pdfContrato.status !== "CONTRATO_CONSOLIDADO" && pdfContrato.autorPerfil !== "PATROCINADOR") {
+                notificacoes.push({
+                    id: `contrato_enviado_rbs_${pdfContrato.id}`,
+                    titulo: "Contrato Disponível para Assinatura",
+                    descricao: `A RBS enviou o contrato (${pdfContrato.titulo}). Baixe o PDF e reenvie assinado.`,
+                    link: "indexContratos.html"
+                });
+            } else if (pdfContrato && (pdfContrato.status === "CONTRATO_CONSOLIDADO" || pdfContrato.autorPerfil === "PATROCINADOR")) {
+                notificacoes.push({
+                    id: `contrato_consolidado_${pdfContrato.id}`,
+                    titulo: "Contrato Consolidado",
+                    descricao: "O contrato de patrocínio da sua empresa está assinado e consolidado.",
+                    link: "indexContratos.html"
+                });
+            }
+
+
+            const enviosRbs = materiais.filter(
+                m => m.autorPerfil !== "PATROCINADOR" &&
+                    m.tipoMaterial !== "CONTRATO" &&
+                    m.tipoMaterial !== "DADOS_SIGNATARIO" &&
+                    m.tipoMaterial !== "FOTO_EMPRESA" &&
+                    m.tipoMaterial !== "PRAZO_PESQUISA"
+            );
+            enviosRbs.slice(0, 3).forEach(m => {
+                notificacoes.push({
+                    id: `midia_rbs_${m.id}`,
+                    titulo: "Novo material publicado pela RBS",
+                    descricao: `${m.titulo}${m.descricao ? " — " + m.descricao : ""}`,
+                    link: "indexPatrocinador.html"
+                });
+            });
+
+
+            const mesesMidia = [...new Set(
+                indicadores.filter(i => i.secao === "MIDIA_MENSAL" && String(i.nomeIndicador).includes("|"))
+                    .map(i => i.nomeIndicador.split("|")[0])
+            )];
+            if (mesesMidia.length > 0) {
+                notificacoes.push({
+                    id: `relatorio_disp_${marcaId}_${mesesMidia.join("_")}`,
+                    titulo: "Relatórios de Volumetria Atualizados",
+                    descricao: `Dados disponíveis para emissão: ${mesesMidia.join(", ")}.`,
+                    link: "indexRelatorio.html"
+                });
+            }
+
+
+            (faqPublicadas || []).filter(f => f.resposta).slice(0, 3).forEach(f => {
+                notificacoes.push({
+                    id: `faq_resp_${f.id}`,
+                    titulo: "Nova resposta publicada no FAQ",
+                    descricao: `Pergunta respondida: "${f.pergunta}"`,
+                    link: "indexFaq.html"
+                });
+            });
+        } else {
+
+            const [pendentesFaq, marcas] = await Promise.all([
+                apiRequest("/faq/pendentes", "GET").catch(() => []),
+                apiRequest("/marcas", "GET").catch(() => [])
+            ]);
+
+            const faqSemResposta = (pendentesFaq || []).filter(item => !item.resposta);
+            if (faqSemResposta.length > 0) {
+                notificacoes.push({
+                    id: `admin_faq_pend_${faqSemResposta.map(f => f.id).join("_")}`,
+                    titulo: `FAQ: ${faqSemResposta.length} pergunta(s) recebida(s)`,
+                    descricao: "Existem dúvidas de patrocinadores aguardando resposta oficial da RBS.",
+                    link: "indexFaq.html"
+                });
+            }
+
+            for (const m of (marcas || [])) {
+                const mats = await apiRequest(`/marcas/${m.id}/materiais`, "GET").catch(() => []);
+                for (const itemPrazo of (mats || []).filter(x => x.tipoMaterial === "PRAZO_PESQUISA")) {
+                    apiRequest(`/materiais/${itemPrazo.id}`, "DELETE").catch(() => { });
+                }
+
+                const signatario = (mats || []).find(x => x.tipoMaterial === "DADOS_SIGNATARIO");
+                const pdfsContrato = (mats || []).filter(x => x.tipoMaterial === "CONTRATO");
+                const pdfConsolidado = pdfsContrato.find(x => x.status === "CONTRATO_CONSOLIDADO" || x.autorPerfil === "PATROCINADOR");
+
+                if (signatario && pdfsContrato.length === 0) {
+                    notificacoes.push({
+                        id: `admin_signatario_${signatario.id}`,
+                        titulo: `Contrato: Representante de ${m.nome}`,
+                        descricao: `A marca ${m.nome} enviou os dados do representante legal e aguarda o envio do contrato em PDF.`,
+                        link: "indexContratos.html"
+                    });
+                } else if (pdfConsolidado) {
+                    notificacoes.push({
+                        id: `admin_contrato_ok_${pdfConsolidado.id}`,
+                        titulo: `Contrato Consolidado: ${m.nome}`,
+                        descricao: `A empresa ${m.nome} reenviou o contrato assinado.`,
+                        link: "indexContratos.html"
+                    });
+                }
+
+                const enviosPatrocinador = (mats || []).filter(
+                    x => x.autorPerfil === "PATROCINADOR" && x.tipoMaterial !== "CONTRATO" && x.tipoMaterial !== "DADOS_SIGNATARIO"
+                );
+                if (enviosPatrocinador.length > 0) {
+                    const ultimo = enviosPatrocinador[0];
+                    notificacoes.push({
+                        id: `admin_envio_marca_${ultimo.id}`,
+                        titulo: `Novo envio de ${m.nome}`,
+                        descricao: `Arquivo enviado: ${ultimo.titulo}`,
+                        link: `detalhes-patrocinador.html?id=${m.id}`
+                    });
+                }
+            }
         }
-
-        if (!textoAlerta) return;
-
-        const topbarEl = document.querySelector("header.topbar");
-        if (!topbarEl || document.getElementById("barraNotificacaoPrazoMaster")) return;
-
-        const barra = document.createElement("div");
-        barra.id = "barraNotificacaoPrazoMaster";
-        barra.className = `notificacao-prazo-barra ${urgente ? "urgente" : ""}`;
-        barra.innerHTML = `
-            <span>${textoAlerta}</span>
-            <a href="indexPesquisa.html" class="button button-primary" style="min-height: 28px; padding: 3px 12px; font-size: 11px;">
-                Acessar Pesquisa
-            </a>
-        `;
-        topbarEl.insertAdjacentElement("afterend", barra);
     } catch {
-        // Silencioso
+
     }
+
+    return notificacoes;
 }
 
 function inicializarLayoutPortal() {
@@ -315,13 +463,33 @@ function inicializarLayoutPortal() {
             <div class="topbar-breadcrumb">
                 <span class="breadcrumb">${textoWorkspace} <b>/</b> <span id="breadcrumbTitle">${tituloBreadcrumb}</span></span>
             </div>
-            <div class="topbar-user">
-                <a class="topbar-user-link" href="indexPerfil.html#perfil" aria-label="Abrir perfil da conta">
-                    <div class="user-text">
-                        <strong id="accountName" data-account-name>${sessao.nome || "Usuário"}</strong>
-                        <span id="accountEmail" data-account-email>${sessao.email || ""}</span>
+            <div class="topbar-right-actions">
+                <div class="notif-wrapper" id="notifWrapper">
+                    <button type="button" class="notif-bell-btn" id="notifBellBtn" aria-label="Notificações da plataforma" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        <span class="notif-badge" id="notifBadgeCount" hidden>0</span>
+                    </button>
+                    <div class="notif-dropdown" id="notifDropdown" hidden>
+                        <div class="notif-dropdown-header">
+                            <strong>Notificações</strong>
+                            <button type="button" class="notif-clear-btn" id="notifMarkAllReadBtn">Marcar como lidas</button>
+                        </div>
+                        <div class="notif-list" id="notifListContainer">
+                            <div class="notif-empty">Carregando avisos...</div>
+                        </div>
                     </div>
-                </a>
+                </div>
+                <div class="topbar-user">
+                    <a class="topbar-user-link" href="indexPerfil.html#perfil" aria-label="Abrir perfil da conta">
+                        <div class="user-text">
+                            <strong id="accountName" data-account-name>${sessao.nome || "Usuário"}</strong>
+                            <span id="accountEmail" data-account-email>${sessao.email || ""}</span>
+                        </div>
+                    </a>
+                </div>
             </div>
         `;
     }
@@ -347,7 +515,81 @@ function inicializarLayoutPortal() {
 
     aplicarNomeEEmail(sessao.nome, sessao.email);
     verificarEExibirModalPrimeiroAcesso(sessao);
-    verificarNotificacaoPrazoPesquisaMaster(sessao);
+
+
+    const bellBtn = document.getElementById("notifBellBtn");
+    const dropdownEl = document.getElementById("notifDropdown");
+    const badgeEl = document.getElementById("notifBadgeCount");
+    const listEl = document.getElementById("notifListContainer");
+    const markReadBtn = document.getElementById("notifMarkAllReadBtn");
+    let notificacoesAtuais = [];
+
+    function renderizarPainelNotificacoes() {
+        if (!listEl || !badgeEl) return;
+        const lidas = new Set(obterNotificacoesLidas());
+        const naoLidas = notificacoesAtuais.filter(n => !lidas.has(n.id));
+
+        if (naoLidas.length > 0) {
+            badgeEl.textContent = String(naoLidas.length);
+            badgeEl.hidden = false;
+        } else {
+            badgeEl.hidden = true;
+        }
+
+        listEl.replaceChildren();
+        if (notificacoesAtuais.length === 0) {
+            listEl.innerHTML = `<div class="notif-empty">Nenhuma notificação no momento.</div>`;
+            return;
+        }
+
+        notificacoesAtuais.forEach(n => {
+            const isUnread = !lidas.has(n.id);
+            const a = document.createElement("a");
+            a.className = `notif-item ${isUnread ? "unread" : ""}`;
+            a.href = n.link || "#";
+            a.innerHTML = `
+                <div class="notif-item-title">
+                    <span>${n.titulo}</span>
+                </div>
+                <span class="notif-item-desc">${n.descricao}</span>
+            `;
+            a.addEventListener("click", () => {
+                marcarNotificacoesComoLidas([n.id]);
+            });
+            listEl.appendChild(a);
+        });
+    }
+
+    bellBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const vaiAbrir = dropdownEl.hidden;
+        dropdownEl.hidden = !vaiAbrir;
+        bellBtn.setAttribute("aria-expanded", String(vaiAbrir));
+    });
+
+    markReadBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        marcarNotificacoesComoLidas(notificacoesAtuais.map(n => n.id));
+        renderizarPainelNotificacoes();
+    });
+
+    document.addEventListener("click", (e) => {
+        const wrapper = document.getElementById("notifWrapper");
+        if (wrapper && dropdownEl && !wrapper.contains(e.target)) {
+            dropdownEl.hidden = true;
+            bellBtn?.setAttribute("aria-expanded", "false");
+        }
+    });
+
+    carregarNotificacoesDaPlataforma(sessao).then(lista => {
+        notificacoesAtuais = lista;
+        renderizarPainelNotificacoes();
+    });
+
+    window.atualizarNotificacoesPlataforma = async function () {
+        notificacoesAtuais = await carregarNotificacoesDaPlataforma(sessao);
+        renderizarPainelNotificacoes();
+    };
 
     if (typeof apiRequest === "function" && localStorage.getItem("rbs_token")) {
         apiRequest("/auth/eu", "GET")

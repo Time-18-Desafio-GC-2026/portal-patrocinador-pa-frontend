@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const confirmPasswordInput = document.getElementById("confirmPassword");
     const toggleAllBtn = document.getElementById("toggleAllPasswordsBtn");
 
-    // Botão único fora dos inputs que mostra/oculta as 3 senhas ao mesmo tempo
+
     toggleAllBtn?.addEventListener("click", () => {
         const campos = [currentPasswordInput, newPasswordInput, confirmPasswordInput].filter(Boolean);
         const mostrar = campos[0]?.type === "password";
@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             localStorage.setItem(SESSION_KEY, JSON.stringify(session));
         }
     } catch {
-        // Mantém cache da sessão
+
     }
 
     const email = session.email || sessionStorage.getItem(EMAIL_SESSION_KEY) || "";

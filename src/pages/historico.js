@@ -1,11 +1,7 @@
-// ==========================================================================
-// PORTAL RBS — CONTROLADOR DE AUDITORIA (PAGINAÇÃO 20 EM 20 + FILTRO AÇÃO + PDF)
-// ==========================================================================
 var HISTORICO_KEY = "rbs_historico";
 var USUARIO_EMAIL_KEY = "rbs_usuario_email";
 var TAMANHO_PAGINA_LOGS = 20;
 
-// Dicionário para você personalizar o nome das ações no filtro e na tabela quando quiser:
 var TEXTOS_PERSONALIZADOS_ACOES = {
     "LOGIN_REALIZADO": "Login realizado na plataforma",
     "PRIMEIRO_ACESSO_CONCLUIDO": "Primeiro acesso e troca de senha concluídos",
@@ -62,7 +58,7 @@ async function carregarAuditoriaDoBackend() {
             apiRequest("/usuarios", "GET").catch(() => [])
         ]);
 
-        // Mapa de ID ou Nome -> E-mail real para garantir que até logs antigos mostrem sempre o e-mail
+
         const mapaEmails = {};
         (usuariosApi || []).forEach(u => {
             if (u.id) mapaEmails[String(u.id)] = u.email;

@@ -1,12 +1,8 @@
 ﻿const IS_LOCAL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 const API_BASE_URL = IS_LOCAL
     ? "http://localhost:8080"
-    : "https://portal-patrocinador-pa-backend.onrender.com"; // <-- Cole aqui a URL do Java da Etapa 2
+    : "https://portal-patrocinador-pa-backend.onrender.com";
 
-/**
- * Cliente HTTP centralizado da aplicação.
- * Injeta automaticamente o Token JWT e padroniza o tratamento de erros da API Java.
- */
 async function apiRequest(endpoint, method = "GET", body = null) {
     const token = localStorage.getItem("rbs_token");
     const headers = {
@@ -24,7 +20,7 @@ async function apiRequest(endpoint, method = "GET", body = null) {
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
-    // Se o token expirou ou foi invalidado (exceto na própria rota de login)
+
     if ((response.status === 401 || response.status === 403) && endpoint !== "/auth/login") {
         localStorage.removeItem("rbs_token");
         localStorage.removeItem("rbs_sessao");
@@ -44,10 +40,6 @@ async function apiRequest(endpoint, method = "GET", body = null) {
     return await response.json();
 }
 
-/**
- * Envia materiais (com ou sem arquivo físico) via multipart/form-data
- * para o endpoint POST /marcas/{marcaId}/materiais integrado ao Supabase Storage.
- */
 async function apiUploadMaterial(marcaId, payloadDados, arquivoFisico = null) {
     if (arquivoFisico && arquivoFisico.size > 20 * 1024 * 1024) {
         throw new Error("O arquivo deve ter no máximo 20 MB.");

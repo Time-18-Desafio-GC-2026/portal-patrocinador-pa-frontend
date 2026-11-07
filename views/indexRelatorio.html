@@ -7,6 +7,7 @@
     <title>RBS Patrocinadores | Relatórios</title>
     <link rel="stylesheet" href="../assets/css/style_portal.css">
     <script src="../src/guards/security.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 
 <body>
@@ -23,16 +24,20 @@
                         <p>Extraia indicadores auditados de veiculações, visualizações, alcance de mídia e ativações no
                             evento.</p>
                     </div>
-                    <div id="adminTemplateActions" hidden>
-                        <button type="button" class="button button-primary" id="btnBaixarPlanilhaModelo">
-                            Baixar Modelo Padrão Excel (.xls)
+                    <div id="adminTemplateActions" style="display: flex; gap: 10px; align-items: center;" hidden>
+                        <button type="button" class="btn-acao-pequeno" id="btnBaixarPlanilhaModelo">
+                            Baixar Modelo Padrão
                         </button>
+                        <button type="button" class="button button-primary" id="btnImportarPlanilhaGeral">
+                            Importar Planilha Geral
+                        </button>
+                        <input type="file" id="inputPlanilhaGeralUnica" accept=".xlsx,.xls,.csv" hidden>
                     </div>
                 </header>
 
                 <div id="alertaDisponibilidadeRelatorio" class="report-alert-banner" hidden>
                     <div>
-                        <strong id="alertaTituloMarca">Dados atualizados disponíveis para emissão</strong>
+                        <strong id="alertaTituloMarca">Notificação de Dados Disponíveis: Marca</strong>
                         <span id="alertaTextoDetalhe">A equipe RBS publicou os dados de veiculação da campanha (Outubro
                             a Fevereiro).</span>
                     </div>

@@ -1,7 +1,4 @@
-﻿// ==========================================================================
-// PORTAL RBS — CONTROLADOR DA CENTRAL DA MARCA (ÁREA DO PATROCINADOR)
-// ==========================================================================
-document.addEventListener("DOMContentLoaded", async function () {
+﻿document.addEventListener("DOMContentLoaded", async function () {
     const botaoNovoEnvio = document.getElementById("newSponsorButton");
     const formularioContainer = document.getElementById("newSponsorForm");
     const botaoFechar = document.getElementById("closeSponsorForm");
@@ -58,19 +55,26 @@ document.addEventListener("DOMContentLoaded", async function () {
             if (badgeCota) badgeCota.textContent = cotaLegivel;
 
             const todosMateriais = materiaisApi || [];
+            for (const m of todosMateriais) {
+                if (m.tipoMaterial === "PRAZO_PESQUISA") {
+                    apiRequest(`/materiais/${m.id}`, "DELETE").catch(() => { });
+                }
+            }
             const fotoMat = todosMateriais.find(m => m.tipoMaterial === "FOTO_EMPRESA");
             const planoMat = todosMateriais.find(m => m.tipoMaterial === "PLANO_COMERCIAL");
             const contratos = todosMateriais.filter(
-                m => m.tipoMaterial === "CONTRATO" || m.abaDestino === "ABA_7_CONTRATO"
+                m => m.tipoMaterial === "CONTRATO" || m.abaDestino === "ABA_7_CONTRATO" || m.tipoMaterial === "DADOS_SIGNATARIO"
             );
             const demaisMateriais = todosMateriais.filter(
                 m => m.tipoMaterial !== "CONTRATO" &&
                     m.abaDestino !== "ABA_7_CONTRATO" &&
+                    m.tipoMaterial !== "DADOS_SIGNATARIO" &&
                     m.tipoMaterial !== "FOTO_EMPRESA" &&
-                    m.tipoMaterial !== "PLANO_COMERCIAL"
+                    m.tipoMaterial !== "PLANO_COMERCIAL" &&
+                    m.tipoMaterial !== "PRAZO_PESQUISA"
             );
 
-            // Renderiza a Logo da Empresa
+
             if (logoContainer) {
                 const urlLogo = fotoMat ? (fotoMat.caminhoStorage || fotoMat.urlExterna) : "";
                 if (urlLogo) {
@@ -81,7 +85,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 }
             }
 
-            // Renderiza o Plano Comercial
+
             if (infoPlano) {
                 infoPlano.replaceChildren();
                 const urlPlano = planoMat ? (planoMat.caminhoStorage || planoMat.urlExterna) : "";
@@ -168,25 +172,52 @@ document.addEventListener("DOMContentLoaded", async function () {
                     const textoInfo = document.createElement("div");
                     textoInfo.style.flex = "1";
                     textoInfo.innerHTML = `
-                        <p class="envio-texto" style="margin:0 0 4px;"><strong>${mat.titulo}</strong>${mat.descricao ? " — " + mat.descricao : ""}</p>
-                        <small style="color:#64748b; font-size:12px;">Status: ${mat.status || "ENVIADO"} • Enviado em: ${dataFormatada}</small>
+                        <p class="envio-texto" style="margin:0 0 2px;"><strong>${mat.titulo}</strong></p>
+                        <small style="color:#64748b; font-size:12px;">Enviado em: ${dataFormatada}</small>
                     `;
-                    linha.appendChild(textoInfo);
+
+                    const acoes = document.createElement("div");
+                    acoes.style.display = "flex";
+                    acoes.style.gap = "8px";
+                    acoes.style.alignItems = "center";
 
                     const urlNuvem = mat.caminhoStorage || mat.urlExterna;
                     if (urlNuvem && urlNuvem.startsWith("http")) {
                         const baixarArquivo = document.createElement("a");
                         baixarArquivo.className = "btn-acao-pequeno";
-                        baixarArquivo.style.textDecoration = "none";
                         baixarArquivo.href = urlNuvem;
                         baixarArquivo.target = "_blank";
                         baixarArquivo.rel = "noopener noreferrer";
                         baixarArquivo.download = mat.titulo || "arquivo";
                         baixarArquivo.textContent = "Baixar arquivo";
-                        linha.appendChild(baixarArquivo);
+                        acoes.appendChild(baixarArquivo);
                     }
 
+                    const btnApagar = document.createElement("button");
+                    btnApagar.type = "button";
+                    btnApagar.className = "btn-acao-perigo";
+                    btnApagar.textContent = "Apagar";
+                    btnApagar.addEventListener("click", async () => {
+                        if (!window.confirm(`Deseja remover o envio "${mat.titulo}"?`)) return;
+                        try {
+                            await apiRequest(`/materiais/${mat.id}`, "DELETE");
+                            await carregarPainelDoPatrocinador();
+                        } catch (erro) {
+                            alert(erro.message || "Não foi possível apagar o envio.");
+                        }
+                    });
+                    acoes.appendChild(btnApagar);
+
+                    linha.append(textoInfo, acoes);
                     item.appendChild(linha);
+
+                    if (mat.descricao) {
+                        const descP = document.createElement("p");
+                        descP.className = "envio-descricao-abaixo";
+                        descP.innerHTML = `<strong>Descrição:</strong> ${mat.descricao}`;
+                        item.appendChild(descP);
+                    }
+
                     listaMeusEnvios.appendChild(item);
                 });
             }
@@ -198,7 +229,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             if (publicadosRbs.length === 0) {
                 const msg = document.createElement("p");
                 msg.className = "envios-patrocinador-vazio";
-                msg.textContent = "Nenhum relatório ou link publicado pela RBS até o momento.";
+                msg.textContent = "Nenhum material ou link publicado pela RBS até o momento.";
                 listaMateriaisRBS.appendChild(msg);
             } else {
                 publicadosRbs.forEach(mat => {
@@ -219,7 +250,6 @@ document.addEventListener("DOMContentLoaded", async function () {
                     if (urlNuvem && urlNuvem.startsWith("http")) {
                         const btnAbrir = document.createElement("a");
                         btnAbrir.className = "button button-primary";
-                        btnAbrir.style.textDecoration = "none";
                         btnAbrir.href = urlNuvem;
                         btnAbrir.target = "_blank";
                         btnAbrir.rel = "noopener noreferrer";
@@ -232,6 +262,14 @@ document.addEventListener("DOMContentLoaded", async function () {
 
                     linha.append(titulo, acoes);
                     item.appendChild(linha);
+
+                    if (mat.descricao && mat.descricao !== mat.urlExterna) {
+                        const descP = document.createElement("p");
+                        descP.className = "envio-descricao-abaixo";
+                        descP.innerHTML = `<strong>Descrição:</strong> ${mat.descricao}`;
+                        item.appendChild(descP);
+                    }
+
                     listaMateriaisRBS.appendChild(item);
                 });
             }
@@ -244,7 +282,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         let extras = { Hooftop: { passaporte: 0, sexta: 0, sabado: 0 }, "Terraço": { passaporte: 0, sexta: 0, sabado: 0 } };
         if (cortesia?.loungeInfo) {
-            try { extras = JSON.parse(cortesia.loungeInfo); } catch { /* ignora */ }
+            try { extras = JSON.parse(cortesia.loungeInfo); } catch { }
         }
 
         const setores = [

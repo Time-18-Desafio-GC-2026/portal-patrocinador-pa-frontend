@@ -18,12 +18,12 @@
             <header class="topbar"></header>
 
             <main class="content" id="pesquisaMain">
-                <!-- VISÃO DO PATROCINADOR MASTER -->
+
                 <section id="visaoPatrocinadorMaster" hidden>
                     <section class="identificacao-patrocinador">
                         <div class="identificacao-cabecalho">
                             <div>
-                                <span class="identificacao-legenda">BENEFÍCIO EXCLUSIVO — COTA MASTER</span>
+                                <span class="identificacao-legenda">BENEFÍCIO EXCLUSIVO COTA MASTER</span>
                                 <h1 id="nomeMarcaPesquisa">Pesquisa de Ativação: Perguntas</h1>
                             </div>
                         </div>
@@ -67,7 +67,6 @@
                     </section>
                 </section>
 
-                <!-- VISÃO DO ADMINISTRADOR RBS -->
                 <section id="visaoAdminPesquisa" hidden>
                     <div class="patrocinadores-topo">
                         <div class="patrocinadores-titulos">
@@ -76,26 +75,23 @@
                                 Master.</p>
                         </div>
 
-                        <!-- BLOCO AZUL NO TOPO PARA DEFINIR A DATA LIMITE DE ENVIO DAS PERGUNTAS -->
-                        <div class="pesquisa-prazo-bloco">
-                            <label for="inputDataLimitePesquisa">Data limite de envio:</label>
-                            <input type="date" id="inputDataLimitePesquisa">
-                            <button type="button" class="button button-primary" id="btnSalvarDataLimitePesquisa">
-                                Salvar Prazo
-                            </button>
-                        </div>
-                    </div>
+                        <div class="barra-controles-pesquisa-topo">
+                            <div class="pesquisa-prazo-bloco">
+                                <label for="inputDataLimitePesquisa">Data limite de envio:</label>
+                                <input type="date" id="inputDataLimitePesquisa">
+                                <button type="button" class="button button-primary" id="btnSalvarDataLimitePesquisa">
+                                    Salvar Prazo
+                                </button>
+                            </div>
 
-                    <div class="history-filters" style="justify-content: space-between; align-items: center;">
-                        <label for="buscaMarcaPesquisa" style="margin: 0; flex: 1 1 320px;">
-                            Buscar Patrocinador Master (Nome ou CNPJ)
-                            <input id="buscaMarcaPesquisa" type="search"
-                                placeholder="Digite o nome da marca ou CNPJ...">
-                        </label>
-                        <button class="history-filter-reset" type="button" id="btnExportarPerguntasPdf"
-                            style="align-self: flex-end; height: 36px;">
-                            Importar Perguntas
-                        </button>
+                            <div class="filtro-compacto-direita">
+                                <input id="buscaMarcaPesquisa" type="search" placeholder="Buscar por nome ou CNPJ..."
+                                    aria-label="Buscar por nome ou CNPJ">
+                                <button class="button button-novo-filtro" type="button" id="btnExportarPerguntasPdf">
+                                    Importar Perguntas
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="listaPesquisaAccordion" class="pesquisa-accordion-wrapper"></div>

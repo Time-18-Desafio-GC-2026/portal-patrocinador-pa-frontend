@@ -1,8 +1,3 @@
-/**
- * ==========================================================================
- * PORTAL RBS — CONTROLADOR DE PESQUISA DE ATIVAÇÃO (ORDENAÇÃO + PRAZO + PDF)
- * ==========================================================================
- */
 const PRAZO_PESQUISA_STORAGE_KEY = "rbs_pesquisa_data_limite";
 
 document.addEventListener("DOMContentLoaded", async function () {
@@ -19,7 +14,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR");
     }
 
-    // ==================== 1. MODO PATROCINADOR MASTER ====================
+
     if (ehPatrocinador) {
         if (visaoPatrocinador) visaoPatrocinador.hidden = false;
         const marcaId = sessao.patrocinadorId;
@@ -111,7 +106,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         return;
     }
 
-    // ==================== 2. MODO ADMIN / SUPERADMIN RBS ====================
+
     if (visaoAdmin) visaoAdmin.hidden = false;
     const containerLista = document.getElementById("listaPesquisaAccordion");
     const inputBusca = document.getElementById("buscaMarcaPesquisa");
@@ -121,7 +116,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     let consolidadoMaster = [];
 
-    // Ordena sempre dos que têm MAIS perguntas registradas para os que têm MENOS
+
     function ordenarPorMaisPerguntas(lista) {
         return [...(lista || [])].sort((a, b) => {
             const diff = (b.perguntas?.length || 0) - (a.perguntas?.length || 0);
@@ -254,7 +249,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     }
 
-    // Salva a Data Limite de Envio e propaga o aviso de prazo para os patrocinadores Master
     btnSalvarDataLimite?.addEventListener("click", async () => {
         const novaData = inputDataLimite?.value;
         if (!novaData) {
@@ -266,21 +260,19 @@ document.addEventListener("DOMContentLoaded", async function () {
         try {
             localStorage.setItem(PRAZO_PESQUISA_STORAGE_KEY, novaData);
             for (const item of consolidadoMaster) {
-                if (item.prazoMatId) {
-                    await apiRequest(`/materiais/${item.prazoMatId}`, "DELETE").catch(() => { });
-                }
-                const criado = await apiUploadMaterial(item.marca.id, {
-                    titulo: "Data Limite da Pesquisa de Ativação",
-                    descricao: novaData,
-                    abaDestino: "ABA_6_PESQUISA",
-                    tipoMaterial: "PRAZO_PESQUISA",
-                    caminhoStorage: null,
-                    urlExterna: "https://portal.rbs.com.br/prazo-pesquisa"
-                }, null).catch(() => null);
-                item.prazoMatId = criado?.id || null;
+                await apiRequest(`/marcas/${item.marca.id}/indicadores`, "POST", {
+                    secao: "SISTEMA_CONFIG",
+                    nomeIndicador: "PRAZO_PESQUISA",
+                    valorNumerico: 0,
+                    valorTexto: novaData,
+                    fonteDados: "Configuração de Prazo RBS"
+                }).catch(() => { });
+            }
+            if (typeof window.atualizarNotificacoesPlataforma === "function") {
+                await window.atualizarNotificacoesPlataforma();
             }
             const dataPt = new Date(novaData + "T00:00:00").toLocaleDateString("pt-BR");
-            alert(`Data limite definida para ${dataPt}! Os patrocinadores Master serão notificados automaticamente.`);
+            alert(`Data limite definida para ${dataPt}! A notificação já está ativa no sino da barra superior dos patrocinadores Master.`);
         } catch (erro) {
             alert(erro.message || "Não foi possível salvar a data limite.");
         } finally {
@@ -293,7 +285,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         renderizarListaMaster(obterListaFiltrada());
     });
 
-    // Gera PDF da Pauta com título limpo "Pauta Pesquisa de Ativação Planeta Atlântida" e "Emitido em" sem quebrar linha
+
     btnImportarPdf?.addEventListener("click", () => {
         const lista = obterListaFiltrada();
         if (lista.length === 0) {

@@ -1,8 +1,3 @@
-/**
- * ==========================================================================
- * PORTAL RBS — CONTROLADOR DE CONTRATOS (FLUXO EM 3 STATUS: PENDENTE, ENVIADO E CONSOLIDADO)
- * ==========================================================================
- */
 document.addEventListener("DOMContentLoaded", async function () {
     const sessao = JSON.parse(localStorage.getItem("rbs_sessao") || "null");
     if (!sessao) return;
@@ -66,7 +61,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         };
     }
 
-    // ==================== 1. VISÃO DO PATROCINADOR ====================
+
     if (ehPatrocinador) {
         if (visaoPatrocinador) visaoPatrocinador.hidden = false;
         const marcaId = sessao.patrocinadorId;
@@ -215,7 +210,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         return;
     }
 
-    // ==================== 2. VISÃO DO ADMINISTRADOR RBS ====================
+
     if (visaoAdmin) visaoAdmin.hidden = false;
     const containerAccordion = document.getElementById("listaContratosAccordion");
     const inputBusca = document.getElementById("buscaContratoMarca");

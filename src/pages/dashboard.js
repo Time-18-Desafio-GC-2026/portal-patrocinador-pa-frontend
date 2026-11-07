@@ -1,7 +1,4 @@
-﻿// ==========================================================================
-// PORTAL RBS — CONTROLADOR CONSOLIDADO DO PAINEL ADMIN (DRY + SUPABASE STORAGE)
-// ==========================================================================
-const PATROCINADORES_KEY = "rbs_patrocinadores";
+﻿const PATROCINADORES_KEY = "rbs_patrocinadores";
 const USUARIOS_KEY = "rbs_usuarios";
 const ENVIOS_KEY = "rbs_envios";
 const MIDIA_RBS_KEY = "rbs_midia_rbs";
@@ -214,6 +211,7 @@ async function sincronizarDadosComBackend() {
                         patrocinadorId: m.id,
                         tipo: mat.tipoMaterial === "LINK_POST" ? "link" : "relatorio",
                         nome: mat.titulo,
+                        descricao: mat.descricao || "",
                         url: mat.urlExterna || mat.descricao,
                         arquivoData: urlArquivoNuvem || "#",
                         criadoEm: mat.criadoEm
@@ -298,7 +296,6 @@ function listarMidiaRBSPorPatrocinador(patrocinadorId) {
     return todos.filter(item => String(item.patrocinadorId) === String(patrocinadorId));
 }
 
-// --- MODULO: Contrato de Patrocínio nos Detalhes da Empresa (Exibe PDF apenas se Consolidado) ---
 function criarSecaoContratos(patrocinador) {
     const registros = listarContratosPorPatrocinador(patrocinador.id);
     const pdfsContrato = registros.filter(c => c.tipoMaterial === "CONTRATO");
@@ -360,24 +357,19 @@ function criarSecaoContratos(patrocinador) {
     return secao;
 }
 
-// --- MODULO: Mídia e Conteúdo (Descrição abaixo do link e sem botão de baixar .txt) ---
 function criarSecaoMidiaUnificada(patrocinador) {
     const enviosMarca = listarEnviosPorPatrocinador(patrocinador.id);
     const enviosRbs = listarMidiaRBSPorPatrocinador(patrocinador.id);
-
     const secao = document.createElement("div");
     secao.className = "patrocinador-envios";
-
     const cabecalho = document.createElement("div");
     cabecalho.className = "secao-cabecalho";
     const titulo = document.createElement("h4");
     titulo.textContent = "Mídia e Conteúdo";
     cabecalho.appendChild(titulo);
-
     const conteudo = document.createElement("div");
     conteudo.className = "secao-conteudo";
 
-    // SUB-BLOCO 1: Envios da Marca
     const blocoMarca = document.createElement("div");
     blocoMarca.className = "midia-subbloco";
     const h5Marca = document.createElement("h5");
@@ -393,11 +385,9 @@ function criarSecaoMidiaUnificada(patrocinador) {
         enviosMarca.forEach(function (envio) {
             const item = document.createElement("div");
             item.className = "envio-item";
-
             if (envio.arquivo && envio.arquivo.arquivoData && envio.arquivo.arquivoData !== "#") {
                 const linhaArquivo = document.createElement("div");
                 linhaArquivo.className = "envio-linha";
-
                 const nomeArquivo = document.createElement("a");
                 nomeArquivo.className = "envio-arquivo-nome";
                 nomeArquivo.href = envio.arquivo.arquivoData;
@@ -405,7 +395,6 @@ function criarSecaoMidiaUnificada(patrocinador) {
                 nomeArquivo.rel = "noopener noreferrer";
                 nomeArquivo.style.fontWeight = "600";
                 nomeArquivo.textContent = envio.arquivo.nome || "Arquivo enviado";
-
                 const baixarArquivo = document.createElement("a");
                 baixarArquivo.className = "button button-primary";
                 baixarArquivo.href = envio.arquivo.arquivoData;
@@ -413,41 +402,31 @@ function criarSecaoMidiaUnificada(patrocinador) {
                 baixarArquivo.rel = "noopener noreferrer";
                 baixarArquivo.download = envio.arquivo.nome || "arquivo-enviado";
                 baixarArquivo.textContent = "Baixar mídia";
-                baixarArquivo.addEventListener("click", function () {
-                    if (envio.id) {
-                        apiRequest(`/materiais/${envio.id}/acessar`, "POST").catch(() => { });
-                    }
-                });
-
                 linhaArquivo.append(nomeArquivo, baixarArquivo);
                 item.appendChild(linhaArquivo);
             }
-
             if (envio.texto && (!envio.arquivo || envio.texto !== envio.arquivo.nome)) {
                 const desc = document.createElement("p");
                 desc.className = "envio-descricao-abaixo";
                 desc.innerHTML = `<strong>Descrição:</strong> ${envio.texto}`;
                 item.appendChild(desc);
             }
-
             blocoMarca.appendChild(item);
         });
     }
 
-    // SUB-BLOCO 2: Envios da RBS
     const blocoRbs = document.createElement("div");
     blocoRbs.className = "midia-subbloco";
     const h5Rbs = document.createElement("h5");
     h5Rbs.textContent = "Envios da RBS";
     blocoRbs.appendChild(h5Rbs);
-
     const listaRbs = document.createElement("div");
     listaRbs.className = "midia-rbs-lista";
 
     if (enviosRbs.length === 0) {
         const vazioRbs = document.createElement("p");
         vazioRbs.className = "midia-rbs-vazio";
-        vazioRbs.textContent = "Nenhum relatório, mídia ou link enviado pela RBS.";
+        vazioRbs.textContent = "Nenhum material ou link enviado pela RBS.";
         listaRbs.appendChild(vazioRbs);
     } else {
         enviosRbs.forEach(function (registro) {
@@ -455,19 +434,13 @@ function criarSecaoMidiaUnificada(patrocinador) {
             item.className = "midia-rbs-item";
             const linha = document.createElement("div");
             linha.className = "envio-linha";
-
             const linkPrincipal = document.createElement("a");
             linkPrincipal.className = "envio-arquivo-nome";
             linkPrincipal.target = "_blank";
             linkPrincipal.rel = "noopener noreferrer";
+            linkPrincipal.style.fontWeight = "600";
             linkPrincipal.href = registro.tipo === "relatorio" ? registro.arquivoData : registro.url;
             linkPrincipal.textContent = registro.tipo === "relatorio" ? registro.nome : registro.url;
-
-            linkPrincipal.addEventListener("click", function () {
-                if (registro.id) {
-                    apiRequest(`/materiais/${registro.id}/acessar`, "POST").catch(() => { });
-                }
-            });
 
             const acoesItem = document.createElement("div");
             acoesItem.style.display = "flex";
@@ -503,96 +476,123 @@ function criarSecaoMidiaUnificada(patrocinador) {
             acoesItem.appendChild(btnApagar);
             linha.append(linkPrincipal, acoesItem);
             item.appendChild(linha);
+
+            if (registro.descricao && registro.descricao !== registro.url) {
+                const descP = document.createElement("p");
+                descP.className = "envio-descricao-abaixo";
+                descP.innerHTML = `<strong>Descrição:</strong> ${registro.descricao}`;
+                item.appendChild(descP);
+            }
             listaRbs.appendChild(item);
         });
     }
 
-    const controlesContainer = document.createElement("div");
-    controlesContainer.className = "midia-rbs-controles-empilhados";
+    const btnAbrirNovoEnvio = document.createElement("button");
+    btnAbrirNovoEnvio.type = "button";
+    btnAbrirNovoEnvio.className = "button button-primary";
+    btnAbrirNovoEnvio.style.marginTop = "10px";
+    btnAbrirNovoEnvio.textContent = "Realizar novo envio";
 
-    const formularioLink = document.createElement("form");
-    formularioLink.className = "midia-rbs-form";
-    const campoLink = document.createElement("input");
-    campoLink.type = "url";
-    campoLink.placeholder = "https://link-da-publicacao.com";
-    campoLink.required = true;
-    const botaoLink = document.createElement("button");
-    botaoLink.type = "submit";
-    botaoLink.className = "button button-primary";
-    botaoLink.textContent = "Adicionar link";
-    formularioLink.append(campoLink, botaoLink);
+    const formNovoEnvio = document.createElement("form");
+    formNovoEnvio.className = "form-novo-envio-rbs";
+    formNovoEnvio.hidden = true;
+    formNovoEnvio.innerHTML = `
+        <h6>Realizar novo envio para ${patrocinador.nome}</h6>
+        <div class="form-edicao-grid">
+            <div class="form-group">
+                <label>Anexar arquivo (opcional)</label>
+                <div class="file-input-with-clear">
+                    <input type="file" name="arquivoRbs" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.mp4,.zip">
+                    <button type="button" class="btn-icon-remove btn-clear-arq-rbs" title="Remover arquivo" hidden>×</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Link externo (opcional)</label>
+                <input type="url" name="linkRbs" placeholder="https://link-da-publicacao.com">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Descrição</label>
+            <input type="text" name="descricaoRbs" placeholder="Ex.: Comprovação de inserção no Instagram do Planeta Atlântida" required>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="form-cancel btn-cancel-envio-rbs">Cancelar</button>
+            <button type="submit" class="button button-primary btn-submit-envio-rbs">Enviar</button>
+        </div>
+    `;
 
-    const formularioArquivo = document.createElement("div");
-    formularioArquivo.className = "midia-rbs-arquivo";
-    const campoArquivo = document.createElement("input");
-    campoArquivo.type = "file";
-    campoArquivo.accept = ".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.mp4,.zip";
-    campoArquivo.hidden = true;
-    const botaoArquivo = document.createElement("button");
-    botaoArquivo.type = "button";
-    botaoArquivo.className = "button button-primary";
-    botaoArquivo.textContent = "Adicionar relatório de mídia / conteúdo";
-    botaoArquivo.addEventListener("click", () => campoArquivo.click());
-
-    campoArquivo.addEventListener("change", async function () {
-        const arquivo = campoArquivo.files[0];
-        if (!arquivo) return;
-        botaoArquivo.disabled = true;
-        botaoArquivo.textContent = "Enviando para a nuvem...";
-        try {
-            await apiUploadMaterial(patrocinador.id, {
-                titulo: arquivo.name,
-                descricao: "Mídia / Relatório publicado pela RBS",
-                abaDestino: "ABA_3_MIDIA",
-                tipoMaterial: "PLANILHA_MIDIA",
-                caminhoStorage: null,
-                urlExterna: null
-            }, arquivo);
-            alert("Conteúdo enviado com sucesso!");
-            await sincronizarDadosComBackend();
-            atualizarTelaPatrocinadores(patrocinador.id);
-        } catch (erro) {
-            alert(erro.message || "Não foi possível enviar o arquivo.");
-        } finally {
-            botaoArquivo.disabled = false;
-            botaoArquivo.textContent = "Adicionar relatório de mídia / conteúdo";
-            campoArquivo.value = "";
-        }
+    const inputArqRbs = formNovoEnvio.elements.arquivoRbs;
+    const btnClearArqRbs = formNovoEnvio.querySelector(".btn-clear-arq-rbs");
+    inputArqRbs.addEventListener("change", () => {
+        btnClearArqRbs.hidden = !(inputArqRbs.files && inputArqRbs.files.length > 0);
+    });
+    btnClearArqRbs.addEventListener("click", () => {
+        inputArqRbs.value = "";
+        btnClearArqRbs.hidden = true;
     });
 
-    formularioLink.addEventListener("submit", async function (event) {
-        event.preventDefault();
-        const url = campoLink.value.trim();
+    btnAbrirNovoEnvio.addEventListener("click", () => {
+        formNovoEnvio.hidden = false;
+        btnAbrirNovoEnvio.hidden = true;
+    });
+
+    formNovoEnvio.querySelector(".btn-cancel-envio-rbs").addEventListener("click", () => {
+        formNovoEnvio.reset();
+        btnClearArqRbs.hidden = true;
+        formNovoEnvio.hidden = true;
+        btnAbrirNovoEnvio.hidden = false;
+    });
+
+    formNovoEnvio.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const arquivo = inputArqRbs.files?.[0] || null;
+        const link = formNovoEnvio.elements.linkRbs.value.trim();
+        const descricao = formNovoEnvio.elements.descricaoRbs.value.trim();
+        if (!arquivo && !link) {
+            alert("Anexe um arquivo ou informe um link externo para realizar o envio.");
+            return;
+        }
+        const btnSubmit = formNovoEnvio.querySelector(".btn-submit-envio-rbs");
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = "Enviando...";
         try {
-            const endereco = new URL(url);
-            if (!["http:", "https:"].includes(endereco.protocol)) {
-                throw new Error("Use um endereço HTTP ou HTTPS.");
+            if (arquivo) {
+                await apiUploadMaterial(patrocinador.id, {
+                    titulo: arquivo.name,
+                    descricao: descricao,
+                    abaDestino: "ABA_3_MIDIA",
+                    tipoMaterial: "PLANILHA_MIDIA",
+                    caminhoStorage: null,
+                    urlExterna: null
+                }, arquivo);
             }
-            await apiUploadMaterial(patrocinador.id, {
-                titulo: "Link de Publicação RBS",
-                descricao: endereco.href,
-                abaDestino: "ABA_3_MIDIA",
-                tipoMaterial: "LINK_POST",
-                caminhoStorage: null,
-                urlExterna: endereco.href
-            }, null);
+            if (link) {
+                const endereco = new URL(link);
+                await apiUploadMaterial(patrocinador.id, {
+                    titulo: endereco.href,
+                    descricao: descricao,
+                    abaDestino: "ABA_3_MIDIA",
+                    tipoMaterial: "LINK_POST",
+                    caminhoStorage: null,
+                    urlExterna: endereco.href
+                }, null);
+            }
             await sincronizarDadosComBackend();
             atualizarTelaPatrocinadores(patrocinador.id);
         } catch (erro) {
-            alert(erro.message || "Informe um link válido.");
+            alert(erro.message || "Não foi possível realizar o envio.");
+        } finally {
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = "Enviar";
         }
     });
 
-    formularioArquivo.append(botaoArquivo, campoArquivo);
-    controlesContainer.append(formularioLink, formularioArquivo);
-    blocoRbs.append(listaRbs, controlesContainer);
-
+    blocoRbs.append(listaRbs, btnAbrirNovoEnvio, formNovoEnvio);
     conteudo.append(blocoMarca, blocoRbs);
     secao.append(cabecalho, conteudo);
     return secao;
 }
 
-// --- MODULO: Cortesias (5 Categorias: Arena, Camarote, Premium, Hooftop, Terraço) ---
 function listarCortesias() {
     return JSON.parse(localStorage.getItem(CORTESIAS_KEY) || "[]");
 }
@@ -774,7 +774,6 @@ function criarSecaoCortesias(patrocinador) {
     return secao;
 }
 
-// --- MODULO: Filtros ---
 function normalizarTexto(valor) {
     return String(valor || "")
         .normalize("NFD")
@@ -826,7 +825,6 @@ function configurarFiltrosPatrocinadores() {
     aplicarFiltros();
 }
 
-// --- MODULO: Cadastro, Edição e Exclusão ---
 async function cadastrarPatrocinador(dados) {
     const emailsValidos = validarEmailsPatrocinador(dados.emails);
     const senhaPadraoInicial = gerarSenhaPadraoPorNome(dados.nome);
@@ -957,7 +955,6 @@ function atualizarTelaPatrocinadores(patrocinadorId) {
     }
 }
 
-// --- MODULO: Renderização dos Cards ---
 function renderizarPatrocinadores(patrocinadoresParaExibir, modoDetalhes = false) {
     const grid = document.getElementById("patrocinadoresGrid");
     if (!grid) return;
@@ -1126,7 +1123,6 @@ function renderizarPatrocinadores(patrocinadoresParaExibir, modoDetalhes = false
         itemPlano.append(tituloPlano, linhaPlano);
         info.appendChild(itemPlano);
 
-        // FORMULÁRIO DE EDIÇÃO INLINE
         const formEdicaoInline = document.createElement("form");
         formEdicaoInline.className = "form-edicao-inline";
         formEdicaoInline.hidden = true;
@@ -1155,17 +1151,26 @@ function renderizarPatrocinadores(patrocinadoresParaExibir, modoDetalhes = false
                 </div>
             </div>
             <div class="form-group" style="margin-top:8px;">
-                <label>E-mails autorizados (separados por vírgula)</label>
-                <input type="text" name="emails" value="${patrocinador.email || ""}" required>
+                <div class="dynamic-emails-header">
+                    <label>E-mails autorizados</label>
+                    <button type="button" class="btn-icon-add btn-add-email-inline" title="Adicionar linha de e-mail">+</button>
+                </div>
+                <div class="dynamic-emails-scroll emails-inline-container"></div>
             </div>
             <div class="form-edicao-grid" style="margin-top:8px;">
                 <div class="form-group">
                     <label>Adicionar / Substituir Plano Comercial</label>
-                    <input type="file" name="planoComercial">
+                    <div class="file-input-with-clear">
+                        <input type="file" name="planoComercial">
+                        <button type="button" class="btn-icon-remove btn-clear-plano-inline" title="Remover arquivo" hidden>×</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Alterar Foto da Empresa</label>
-                    <input type="file" name="fotoEmpresa" accept="image/png,image/jpeg,image/webp">
+                    <div class="file-input-with-clear">
+                        <input type="file" name="fotoEmpresa" accept="image/png,image/jpeg,image/webp">
+                        <button type="button" class="btn-icon-remove btn-clear-foto-inline" title="Remover foto" hidden>×</button>
+                    </div>
                 </div>
             </div>
             <div class="form-actions" style="margin-top:12px;">
@@ -1174,7 +1179,68 @@ function renderizarPatrocinadores(patrocinadoresParaExibir, modoDetalhes = false
             </div>
         `;
 
+        const containerEmailsInline = formEdicaoInline.querySelector(".emails-inline-container");
+        function adicionarLinhaEmailEdicao(valor = "") {
+            const row = document.createElement("div");
+            row.className = "dynamic-email-row";
+            const inp = document.createElement("input");
+            inp.type = "email";
+            inp.name = "emailInlineItem";
+            inp.placeholder = "funcionario@empresa.com";
+            inp.value = valor;
+            inp.required = true;
+            const btnRem = document.createElement("button");
+            btnRem.type = "button";
+            btnRem.className = "btn-icon-remove";
+            btnRem.textContent = "×";
+            btnRem.addEventListener("click", () => {
+                if (containerEmailsInline.querySelectorAll(".dynamic-email-row").length > 1) {
+                    row.remove();
+                } else {
+                    inp.value = "";
+                }
+            });
+            row.append(inp, btnRem);
+            containerEmailsInline.appendChild(row);
+        }
+
+        function popularEmailsAtuaisNaEdicao() {
+            containerEmailsInline.replaceChildren();
+            const listaAtuais = normalizarEmailsPatrocinador(patrocinador.email);
+            if (listaAtuais.length === 0) {
+                adicionarLinhaEmailEdicao("");
+            } else {
+                listaAtuais.forEach(em => adicionarLinhaEmailEdicao(em));
+            }
+        }
+        popularEmailsAtuaisNaEdicao();
+
+        formEdicaoInline.querySelector(".btn-add-email-inline").addEventListener("click", () => {
+            adicionarLinhaEmailEdicao("");
+        });
+
+        const inpPlanoInline = formEdicaoInline.elements.planoComercial;
+        const btnClearPlanoInline = formEdicaoInline.querySelector(".btn-clear-plano-inline");
+        inpPlanoInline.addEventListener("change", () => {
+            btnClearPlanoInline.hidden = !(inpPlanoInline.files && inpPlanoInline.files.length > 0);
+        });
+        btnClearPlanoInline.addEventListener("click", () => {
+            inpPlanoInline.value = "";
+            btnClearPlanoInline.hidden = true;
+        });
+
+        const inpFotoInline = formEdicaoInline.elements.fotoEmpresa;
+        const btnClearFotoInline = formEdicaoInline.querySelector(".btn-clear-foto-inline");
+        inpFotoInline.addEventListener("change", () => {
+            btnClearFotoInline.hidden = !(inpFotoInline.files && inpFotoInline.files.length > 0);
+        });
+        btnClearFotoInline.addEventListener("click", () => {
+            inpFotoInline.value = "";
+            btnClearFotoInline.hidden = true;
+        });
+
         botaoEditarTopo.addEventListener("click", () => {
+            popularEmailsAtuaisNaEdicao();
             formEdicaoInline.hidden = !formEdicaoInline.hidden;
         });
 
@@ -1188,16 +1254,18 @@ function renderizarPatrocinadores(patrocinadoresParaExibir, modoDetalhes = false
             btnSalvar.disabled = true;
             btnSalvar.textContent = "Salvando...";
             try {
-                const arqFoto = formEdicaoInline.elements.fotoEmpresa?.files?.[0] || null;
+                const arqFoto = inpFotoInline?.files?.[0] || null;
                 validarArquivoFoto(arqFoto);
-
+                const emailsColetados = [...containerEmailsInline.querySelectorAll("input[name='emailInlineItem']")]
+                    .map(i => i.value.trim())
+                    .filter(Boolean);
                 await editarPatrocinadorInline(patrocinador, {
                     nome: formEdicaoInline.elements.nome.value.trim(),
                     cnpj: formEdicaoInline.elements.cnpj.value.trim(),
                     cota: formEdicaoInline.elements.cota.value,
-                    email: formEdicaoInline.elements.emails.value.trim(),
+                    email: emailsColetados,
                     senhaPadrao: formEdicaoInline.elements.senhaPadrao.value.trim(),
-                    arquivoFisico: formEdicaoInline.elements.planoComercial?.files?.[0] || null,
+                    arquivoFisico: inpPlanoInline?.files?.[0] || null,
                     fotoFisica: arqFoto
                 });
                 alert("Dados da empresa atualizados com sucesso!");
@@ -1282,7 +1350,6 @@ function renderizarDetalhePatrocinador(id) {
     renderizarPatrocinadores([patrocinador], true);
 }
 
-// --- Inicialização e Eventos do Modal de Cadastro ---
 document.addEventListener("DOMContentLoaded", async function () {
     const isDetailPage = document.body.classList.contains("sponsor-detail-page");
     const parametrosUrl = new URLSearchParams(window.location.search);

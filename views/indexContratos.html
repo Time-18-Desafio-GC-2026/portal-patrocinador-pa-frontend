@@ -18,7 +18,7 @@
             <header class="topbar"></header>
 
             <main class="content">
-                <!-- VISÃO DO PATROCINADOR -->
+
                 <section id="visaoContratoPatrocinador" hidden>
                     <header class="history-header">
                         <h1>Contrato de Patrocínio</h1>
@@ -73,20 +73,18 @@
                     </div>
                 </section>
 
-                <!-- VISÃO DO ADMINISTRADOR RBS -->
                 <section id="visaoContratoAdmin" hidden>
-                    <header class="history-header">
-                        <h1>Contratos de Patrocínio</h1>
-                        <p>Acompanhe os dados de representante legal enviados pelos patrocinadores, disponibilize os
-                            contratos assinados pela RBS e consulte os contratos consolidados.</p>
-                    </header>
-
-                    <div class="history-filters" style="justify-content: space-between; align-items: center;">
-                        <label for="buscaContratoMarca" style="margin: 0; flex: 1 1 320px;">
-                            Buscar Patrocinador (Nome ou CNPJ)
-                            <input id="buscaContratoMarca" type="search"
-                                placeholder="Filtrar por nome da marca ou CNPJ...">
-                        </label>
+                    <div class="patrocinadores-topo">
+                        <div class="patrocinadores-titulos">
+                            <h1>Contratos de Patrocínio</h1>
+                            <p>Acompanhe os dados de representante legal, disponibilize contratos e consulte os
+                                documentos consolidados.
+                            </p>
+                        </div>
+                        <div class="filtro-compacto-direita">
+                            <input id="buscaContratoMarca" type="search" placeholder="Buscar por nome ou CNPJ..."
+                                aria-label="Buscar por nome ou CNPJ">
+                        </div>
                     </div>
 
                     <div id="listaContratosAccordion" class="pesquisa-accordion-wrapper"></div>

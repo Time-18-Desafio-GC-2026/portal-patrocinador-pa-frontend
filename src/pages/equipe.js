@@ -1,8 +1,3 @@
-/**
- * ==========================================================================
- * PORTAL RBS — CONTROLADOR DE GESTÃO DA EQUIPE RBS (INPUTS DINÂMICOS + E × COM SENHA DO SUPERADMIN)
- * ==========================================================================
- */
 const SENHA_PADRAO_ADMINS_KEY = "rbs_senha_padrao_admins";
 
 document.addEventListener("DOMContentLoaded", async function () {
@@ -55,7 +50,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         return Number.isNaN(d.getTime()) ? "Nunca acessou" : d.toLocaleString("pt-BR");
     }
 
-    // Cria linha de input para um novo e-mail ou para um administrador já existente
+
     function adicionarLinhaEmailAdmin(adminExistente = null) {
         if (!emailsContainer) return;
         const row = document.createElement("div");
@@ -93,7 +88,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 return;
             }
 
-            // Se for um administrador já cadastrado, exige a senha do SuperAdmin e avisa sobre a perda de acesso
+
             const senhaSuperAdmin = window.prompt(
                 `ATENÇÃO: Remover o e-mail "${adminExistente.email}" fará com que este administrador perca imediatamente o acesso à sua conta na plataforma.\n\nPara confirmar a remoção, digite a sua senha de SuperAdmin:`
             );
@@ -140,7 +135,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 u => u.perfil === "SUPERADMIN" || u.perfil === "ADMIN"
             );
 
-            // Renderiza na caixa de scroll os administradores existentes (com × protegido por senha) + 1 linha em branco para novos
+
             if (emailsContainer) {
                 emailsContainer.replaceChildren();
                 const adminsComuns = equipe.filter(u => u.perfil === "ADMIN");

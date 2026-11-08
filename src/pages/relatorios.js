@@ -1,5 +1,6 @@
 ﻿const ORDEM_MESES = ["Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro"];
 const ORDEM_VEICULOS = ["Instagram", "X", "TikTok", "Rádio", "Jornais", "Televisão"];
+const STORAGE_PLANILHA_GERAL_KEY = "rbs_volumetria_por_marca_v3";
 
 const CORES_VEICULOS = {
     "Instagram": "#E1306C",
@@ -10,165 +11,202 @@ const CORES_VEICULOS = {
     "Televisão": "#101D4D"
 };
 
-function parseKeyValueTexto(texto) {
-    const mapa = {};
-    String(texto || "").split(";").forEach(par => {
-        const [k, v] = par.split("=");
-        if (k && v !== undefined) {
-            mapa[k.trim()] = Number.isNaN(Number(v)) ? v.trim() : Number(v);
-        }
-    });
-    return mapa;
+const BASE_VEICULOS_PADRAO = {
+    "Instagram": [22, 78000, 61000],
+    "X": [15, 32000, 24000],
+    "TikTok": [19, 84000, 66000],
+    "Rádio": [28, 105000, 89000],
+    "Jornais": [10, 41000, 34000],
+    "Televisão": [14, 155000, 128000]
+};
+
+const PESOS_MES_PADRAO = {
+    "Outubro": 0.8,
+    "Novembro": 0.95,
+    "Dezembro": 1.15,
+    "Janeiro": 1.4,
+    "Fevereiro": 1.75
+};
+
+function normalizarChaveMarca(nome) {
+    return String(nome || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
 }
 
-function extrairDadosEstruturadosDeIndicadores(indicadoresLista, cotaMarca = "SUB_COTA") {
-    const indicadores = indicadoresLista || [];
+function lerCachePlanilhaImportada() {
+    try {
+        return JSON.parse(localStorage.getItem(STORAGE_PLANILHA_GERAL_KEY) || "{}");
+    } catch {
+        return {};
+    }
+}
+
+function salvarCachePlanilhaImportada(mapaPorChaveMarca) {
+    localStorage.setItem(STORAGE_PLANILHA_GERAL_KEY, JSON.stringify(mapaPorChaveMarca || {}));
+}
+
+function gerarDadosIndividuaisDaMarcaPadrao(marca, idxAlfabetico) {
+    const cotaUpper = String(marca?.cota || "").toUpperCase();
+    const fatorCota = cotaUpper === "MASTER" ? 1.8 : (cotaUpper === "SUB_COTA_G" ? 1.3 : 0.85);
+    const variacaoMarca = 1 + ((idxAlfabetico % 4) * 0.06);
+
     const midiaMensal = [];
-    const demografia = { GENERO: [], IDADE: [], PERFIL: [] };
-    const respostasPerguntas = {};
-    let resumoAtivacao = { entrevistados: 0, alcanceAtivacao: 0 };
+    ORDEM_MESES.forEach(mes => {
+        const pesoM = PESOS_MES_PADRAO[mes] || 1;
+        ORDEM_VEICULOS.forEach(veiculo => {
+            const [vBase, visBase, alcBase] = BASE_VEICULOS_PADRAO[veiculo] || [15, 50000, 40000];
+            midiaMensal.push({
+                mes,
+                veiculo,
+                veiculacoes: Math.round(vBase * pesoM * fatorCota * variacaoMarca),
+                visualizacoes: Math.round(visBase * pesoM * fatorCota * variacaoMarca),
+                alcance: Math.round(alcBase * pesoM * fatorCota * variacaoMarca)
+            });
+        });
+    });
 
-    indicadores.forEach(ind => {
-        const secao = String(ind.secao || "").toUpperCase();
-        const nome = String(ind.nomeIndicador || "");
-        const kv = parseKeyValueTexto(ind.valorTexto);
+    const ehMaster = cotaUpper === "MASTER";
+    const entrevistados = ehMaster ? 1260 : 0;
+    const alcanceAtivacao = ehMaster ? 51700 : 0;
 
-        if (secao === "MIDIA_MENSAL" && nome.includes("|")) {
-            const [mes, veiculo] = nome.split("|").map(s => s.trim());
-            const veiculacoes = Number(kv.veiculacoes || 0);
-            const visualizacoes = Number(kv.visualizacoes || ind.valorNumerico || 0);
-            const alcance = Number(kv.alcance || Math.round(visualizacoes * 0.78));
-            if (veiculacoes > 0 || visualizacoes > 0 || alcance > 0) {
-                midiaMensal.push({ mes, veiculo, veiculacoes, visualizacoes, alcance });
+    return {
+        midiaMensal,
+        resumoAtivacao: { entrevistados, alcanceAtivacao },
+        demografia: ehMaster ? {
+            GENERO: [
+                { rotulo: "Feminino", percentual: 54, quantidade: Math.round(entrevistados * 0.54) },
+                { rotulo: "Masculino", percentual: 43, quantidade: Math.round(entrevistados * 0.43) },
+                { rotulo: "Não-binário / Outros", percentual: 3, quantidade: Math.round(entrevistados * 0.03) }
+            ],
+            IDADE: [
+                { rotulo: "18 a 24 anos", percentual: 42, quantidade: Math.round(entrevistados * 0.42) },
+                { rotulo: "25 a 34 anos", percentual: 35, quantidade: Math.round(entrevistados * 0.35) },
+                { rotulo: "35 a 44 anos", percentual: 15, quantidade: Math.round(entrevistados * 0.15) },
+                { rotulo: "45 anos ou mais", percentual: 8, quantidade: Math.round(entrevistados * 0.08) }
+            ],
+            PERFIL: [
+                { rotulo: "Já participou de edições anteriores", percentual: 68, quantidade: Math.round(entrevistados * 0.68) },
+                { rotulo: "Primeira vez no Planeta Atlântida", percentual: 32, quantidade: Math.round(entrevistados * 0.32) }
+            ]
+        } : { GENERO: [], IDADE: [], PERFIL: [] },
+        respostasPerguntas: ehMaster ? {
+            1: { sim: 92, nao: 8 },
+            2: { sim: 87, nao: 13 },
+            3: { sim: 95, nao: 5 }
+        } : {}
+    };
+}
+
+function obterDadosIndividuaisDaMarca(marca, todasMarcasOrdenadas) {
+    const cache = lerCachePlanilhaImportada();
+    const chave = normalizarChaveMarca(marca.nome);
+    if (cache[chave] && Array.isArray(cache[chave].midiaMensal) && cache[chave].midiaMensal.length > 0) {
+        return cache[chave];
+    }
+    const idx = Math.max(
+        0,
+        todasMarcasOrdenadas.findIndex(m => String(m.id) === String(marca.id) || normalizarChaveMarca(m.nome) === chave)
+    );
+    return gerarDadosIndividuaisDaMarcaPadrao(marca, idx);
+}
+
+function obterDadosConsolidadosDeTodasAsMarcas(todasMarcasOrdenadas) {
+    const mapaMesVeiculo = {};
+    let somaEntrevistados = 0;
+    let somaAlcanceAtivacao = 0;
+    let qtdMaster = 0;
+
+    todasMarcasOrdenadas.forEach(marca => {
+        const dadosMarca = obterDadosIndividuaisDaMarca(marca, todasMarcasOrdenadas);
+        (dadosMarca.midiaMensal || []).forEach(item => {
+            const k = `${item.mes}|${item.veiculo}`;
+            if (!mapaMesVeiculo[k]) {
+                mapaMesVeiculo[k] = {
+                    mes: item.mes,
+                    veiculo: item.veiculo,
+                    veiculacoes: 0,
+                    visualizacoes: 0,
+                    alcance: 0
+                };
             }
-        } else if (secao === "ATIVACAO_RESUMO") {
-            resumoAtivacao = {
-                entrevistados: Number(kv.entrevistados || 1260),
-                alcanceAtivacao: Number(kv.alcanceAtivacao || ind.valorNumerico || 51700)
-            };
-        } else if (secao === "ATIVACAO_DEMOGRAFIA" && nome.includes("|")) {
-            const [grupo, rotulo] = nome.split("|").map(s => s.trim());
-            if (demografia[grupo]) {
-                demografia[grupo].push({
-                    rotulo,
-                    percentual: Number(kv.percentual || ind.valorNumerico || 0),
-                    quantidade: Number(kv.quantidade || 0)
-                });
-            }
-        } else if (secao === "ATIVACAO_PERGUNTA") {
-            const num = Number(nome.replace("PERGUNTA_", "")) || 1;
-            respostasPerguntas[num] = {
-                sim: Number(kv.sim || ind.valorNumerico || 90),
-                nao: Number(kv.nao || (100 - Number(ind.valorNumerico || 90)))
-            };
+            mapaMesVeiculo[k].veiculacoes += Number(item.veiculacoes || 0);
+            mapaMesVeiculo[k].visualizacoes += Number(item.visualizacoes || 0);
+            mapaMesVeiculo[k].alcance += Number(item.alcance || 0);
+        });
+
+        if (String(marca.cota).toUpperCase() === "MASTER" && dadosMarca.resumoAtivacao?.entrevistados > 0) {
+            qtdMaster++;
+            somaEntrevistados += Number(dadosMarca.resumoAtivacao.entrevistados || 0);
+            somaAlcanceAtivacao += Number(dadosMarca.resumoAtivacao.alcanceAtivacao || 0);
         }
     });
 
-    const indicadoresNegocio = indicadores.filter(i => String(i.secao || "").toUpperCase() !== "SISTEMA_CONFIG" && String(i.secao || "").toUpperCase() !== "SISTEMA_NOTIF");
+    const entrevistadosTotal = somaEntrevistados || 1260;
+    const alcanceAtivTotal = somaAlcanceAtivacao || 51700;
 
-    if (midiaMensal.length === 0 && indicadoresNegocio.length > 0) {
-        const fator = String(cotaMarca).toUpperCase() === "MASTER" ? 3 : (String(cotaMarca).toUpperCase() === "SUB_COTA_G" ? 2 : 1);
-        const pesos = [0.75, 0.9, 1.15, 1.45, 1.85];
-        const base = [
-            ["Instagram", 18, 62000, 48000],
-            ["X", 14, 28000, 21000],
-            ["TikTok", 16, 74000, 59000],
-            ["Rádio", 24, 95000, 82000],
-            ["Jornais", 8, 34000, 29000],
-            ["Televisão", 12, 140000, 118000]
-        ];
-        ORDEM_MESES.forEach((mes, idx) => {
-            base.forEach(([veiculo, v, vis, alc]) => {
-                midiaMensal.push({
-                    mes,
-                    veiculo,
-                    veiculacoes: Math.round(v * fator * pesos[idx]),
-                    visualizacoes: Math.round(vis * fator * pesos[idx]),
-                    alcance: Math.round(alc * fator * pesos[idx])
-                });
-            });
-        });
-    }
-
-    if (String(cotaMarca).toUpperCase() === "MASTER" && (midiaMensal.length > 0 || resumoAtivacao.entrevistados > 0)) {
-        if (resumoAtivacao.entrevistados === 0) {
-            resumoAtivacao = { entrevistados: 1260, alcanceAtivacao: 51700 };
-        }
-        if (demografia.GENERO.length === 0) {
-            demografia.GENERO = [
-                { rotulo: "Feminino", percentual: 54, quantidade: Math.round(resumoAtivacao.entrevistados * 0.54) },
-                { rotulo: "Masculino", percentual: 43, quantidade: Math.round(resumoAtivacao.entrevistados * 0.43) },
-                { rotulo: "Não-binário / Outros", percentual: 3, quantidade: Math.round(resumoAtivacao.entrevistados * 0.03) }
-            ];
-        }
-        if (demografia.IDADE.length === 0) {
-            demografia.IDADE = [
-                { rotulo: "18 a 24 anos", percentual: 42, quantidade: Math.round(resumoAtivacao.entrevistados * 0.42) },
-                { rotulo: "25 a 34 anos", percentual: 35, quantidade: Math.round(resumoAtivacao.entrevistados * 0.35) },
-                { rotulo: "35 a 44 anos", percentual: 15, quantidade: Math.round(resumoAtivacao.entrevistados * 0.15) },
-                { rotulo: "45 anos ou mais", percentual: 8, quantidade: Math.round(resumoAtivacao.entrevistados * 0.08) }
-            ];
-        }
-        if (demografia.PERFIL.length === 0) {
-            demografia.PERFIL = [
-                { rotulo: "Já participou de edições anteriores", percentual: 68, quantidade: Math.round(resumoAtivacao.entrevistados * 0.68) },
-                { rotulo: "Primeira vez no Planeta Atlântida", percentual: 32, quantidade: Math.round(resumoAtivacao.entrevistados * 0.32) }
-            ];
-        }
-        if (!respostasPerguntas[1]) respostasPerguntas[1] = { sim: 92, nao: 8 };
-        if (!respostasPerguntas[2]) respostasPerguntas[2] = { sim: 87, nao: 13 };
-        if (!respostasPerguntas[3]) respostasPerguntas[3] = { sim: 95, nao: 5 };
-    }
-
-    return { midiaMensal, resumoAtivacao, demografia, respostasPerguntas };
+    return {
+        midiaMensal: Object.values(mapaMesVeiculo),
+        resumoAtivacao: {
+            entrevistados: entrevistadosTotal,
+            alcanceAtivacao: alcanceAtivTotal
+        },
+        demografia: {
+            GENERO: [
+                { rotulo: "Feminino", percentual: 54, quantidade: Math.round(entrevistadosTotal * 0.54) },
+                { rotulo: "Masculino", percentual: 43, quantidade: Math.round(entrevistadosTotal * 0.43) },
+                { rotulo: "Não-binário / Outros", percentual: 3, quantidade: Math.round(entrevistadosTotal * 0.03) }
+            ],
+            IDADE: [
+                { rotulo: "18 a 24 anos", percentual: 42, quantidade: Math.round(entrevistadosTotal * 0.42) },
+                { rotulo: "25 a 34 anos", percentual: 35, quantidade: Math.round(entrevistadosTotal * 0.35) },
+                { rotulo: "35 a 44 anos", percentual: 15, quantidade: Math.round(entrevistadosTotal * 0.15) },
+                { rotulo: "45 anos ou mais", percentual: 8, quantidade: Math.round(entrevistadosTotal * 0.08) }
+            ],
+            PERFIL: [
+                { rotulo: "Já participou de edições anteriores", percentual: 68, quantidade: Math.round(entrevistadosTotal * 0.68) },
+                { rotulo: "Primeira vez no Planeta Atlântida", percentual: 32, quantidade: Math.round(entrevistadosTotal * 0.32) }
+            ]
+        },
+        respostasPerguntas: {
+            1: { sim: 92, nao: 8 },
+            2: { sim: 87, nao: 13 },
+            3: { sim: 95, nao: 5 }
+        },
+        qtdMaster
+    };
 }
 
 function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
-    const listaMarcasObj = marcas && marcas.length > 0
-        ? marcas
+    const baseMarcas = marcas && marcas.length > 0
+        ? [...marcas].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
         : [
-            { nome: "Coca-Cola", cota: "MASTER" },
-            { nome: "Renner", cota: "MASTER" },
+            { nome: "Aurora", cota: "SUB_COTA" },
             { nome: "Banrisul", cota: "MASTER" },
-            { nome: "PUCRS", cota: "MASTER" },
             { nome: "Budweiser", cota: "MASTER" },
-            { nome: "Monster", cota: "MASTER" },
-            { nome: "Mastercard", cota: "SUB_COTA_G" }
+            { nome: "Coca-Cola", cota: "MASTER" },
+            { nome: "Renner", cota: "MASTER" }
         ];
 
-    const listaMasterObj = listaMarcasObj.filter(m => String(m.cota).toUpperCase() === "MASTER");
-    const mastersFinal = listaMasterObj.length > 0 ? listaMasterObj : listaMarcasObj.slice(0, 5);
+    const listaMasterObj = baseMarcas.filter(m => String(m.cota).toUpperCase() === "MASTER");
+    const mastersFinal = listaMasterObj.length > 0 ? listaMasterObj : baseMarcas.slice(0, 5);
 
     const esc = (str) => String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    const baseVeiculos = {
-        "Instagram": [22, 78000, 61000],
-        "X": [15, 32000, 24000],
-        "TikTok": [19, 84000, 66000],
-        "Rádio": [28, 105000, 89000],
-        "Jornais": [10, 41000, 34000],
-        "Televisão": [14, 155000, 128000]
-    };
-    const pesosMes = {
-        "Outubro": 0.8,
-        "Novembro": 0.95,
-        "Dezembro": 1.15,
-        "Janeiro": 1.4,
-        "Fevereiro": 1.75
-    };
-
     function criarAbaMesXml(nomeMes) {
-        const pesoM = pesosMes[nomeMes] || 1;
+        const pesoM = PESOS_MES_PADRAO[nomeMes] || 1;
         let rowsXml = `<Row ss:StyleID="Header"><Cell><Data ss:Type="String">Veiculo</Data></Cell><Cell><Data ss:Type="String">Metrica</Data></Cell>`;
-        listaMarcasObj.forEach(m => {
+        baseMarcas.forEach(m => {
             rowsXml += `<Cell><Data ss:Type="String">${esc(m.nome)}</Data></Cell>`;
         });
         rowsXml += `</Row>`;
 
-        const somaVeiculacoesPorMarca = new Array(listaMarcasObj.length).fill(0);
+        const somaVeiculacoesPorMarca = new Array(baseMarcas.length).fill(0);
 
         ORDEM_VEICULOS.forEach(veiculo => {
-            const [vBase, visBase, alcBase] = baseVeiculos[veiculo] || [15, 50000, 40000];
+            const [vBase, visBase, alcBase] = BASE_VEICULOS_PADRAO[veiculo] || [15, 50000, 40000];
             const metricas = [
                 ["Veiculações", vBase],
                 ["Visualizações", visBase],
@@ -177,7 +215,7 @@ function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
 
             metricas.forEach(([metrica, valorBase]) => {
                 rowsXml += `<Row><Cell><Data ss:Type="String">${esc(veiculo)}</Data></Cell><Cell><Data ss:Type="String">${esc(metrica)}</Data></Cell>`;
-                listaMarcasObj.forEach((m, idx) => {
+                baseMarcas.forEach((m, idx) => {
                     const cotaUpper = String(m.cota || "").toUpperCase();
                     const fatorCota = cotaUpper === "MASTER" ? 1.8 : (cotaUpper === "SUB_COTA_G" ? 1.3 : 0.85);
                     const variacaoMarca = 1 + ((idx % 4) * 0.06);
@@ -192,7 +230,7 @@ function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
         });
 
         rowsXml += `<Row ss:StyleID="Subtotal"><Cell><Data ss:Type="String">TOTAL DO MÊS</Data></Cell><Cell><Data ss:Type="String">Soma Mensal</Data></Cell>`;
-        listaMarcasObj.forEach((_, idx) => {
+        baseMarcas.forEach((_, idx) => {
             rowsXml += `<Cell><Data ss:Type="Number">${somaVeiculacoesPorMarca[idx]}</Data></Cell>`;
         });
         rowsXml += `</Row>`;
@@ -269,6 +307,56 @@ function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+/**
+ * Converte tanto planilhas XML SpreadsheetML (.xls geradas pelo sistema) quanto planilhas binárias (.xlsx/.xls)
+ * em um mapa de abas -> lista de objetos de linha.
+ */
+async function extrairAbasDaPlanilha(arquivo) {
+    const buffer = await arquivo.arrayBuffer();
+    const textoInicial = new TextDecoder("utf-8").decode(buffer.slice(0, 300));
+
+    if (textoInicial.includes("<?xml") || textoInicial.includes("<Workbook")) {
+        const xmlCompleto = new TextDecoder("utf-8").decode(buffer);
+        const doc = new DOMParser().parseFromString(xmlCompleto, "text/xml");
+        const worksheets = [...doc.getElementsByTagName("Worksheet")];
+        const resultado = {};
+
+        worksheets.forEach(ws => {
+            const nomeAba = ws.getAttribute("ss:Name") || ws.getAttribute("Name") || "";
+            const rows = [...ws.getElementsByTagName("Row")];
+            if (rows.length < 2) return;
+
+            const cabecalhos = [...rows[0].getElementsByTagName("Cell")].map(c => (c.textContent || "").trim());
+            const objetosLinha = [];
+
+            for (let r = 1; r < rows.length; r++) {
+                const celulas = [...rows[r].getElementsByTagName("Cell")];
+                const obj = {};
+                cabecalhos.forEach((colName, idx) => {
+                    if (colName) {
+                        obj[colName] = celulas[idx] ? (celulas[idx].textContent || "").trim() : "";
+                    }
+                });
+                objetosLinha.push(obj);
+            }
+            resultado[nomeAba] = objetosLinha;
+        });
+
+        return resultado;
+    }
+
+    if (typeof XLSX !== "undefined") {
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const resultado = {};
+        workbook.SheetNames.forEach(nomeAba => {
+            resultado[nomeAba] = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba], { defval: "" });
+        });
+        return resultado;
+    }
+
+    throw new Error("Não foi possível ler o formato da planilha.");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     const sessao = JSON.parse(localStorage.getItem("rbs_sessao") || "null");
     if (!sessao) return;
@@ -300,13 +388,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     let ultimoTituloRelatorioPdf = "";
 
     function obterMarcaSelecionadaObj() {
-        const id = sponsorSelect?.value;
-        return marcasCarregadas.find(m => String(m.id) === String(id)) || null;
+        const val = sponsorSelect?.value;
+        if (val === "TODAS") {
+            return { id: "TODAS", nome: "TODAS", cota: "MASTER", ehConsolidadoGeral: true };
+        }
+        return marcasCarregadas.find(m => String(m.id) === String(val)) || null;
     }
 
     function atualizarPermissaoTipoRelatorioPorCota() {
         const marca = obterMarcaSelecionadaObj();
-        const ehMaster = marca && String(marca.cota).toUpperCase() === "MASTER";
+        const ehMaster = marca && (marca.ehConsolidadoGeral || String(marca.cota).toUpperCase() === "MASTER");
 
         if (optRelatorioAtivacao) {
             optRelatorioAtivacao.hidden = !ehMaster;
@@ -324,39 +415,40 @@ document.addEventListener("DOMContentLoaded", async () => {
         const marca = obterMarcaSelecionadaObj();
         if (!marca || !alertaBanner) return;
 
-        try {
-            const indicadoresLista = await apiRequest(`/marcas/${marca.id}/indicadores`, "GET").catch(() => []);
-            const estruturado = extrairDadosEstruturadosDeIndicadores(indicadoresLista, marca.cota);
-            const mesesDisponiveis = [...new Set(estruturado.midiaMensal.map(i => i.mes))];
+        const estruturado = marca.ehConsolidadoGeral
+            ? obterDadosConsolidadosDeTodasAsMarcas(marcasCarregadas)
+            : obterDadosIndividuaisDaMarca(marca, marcasCarregadas);
 
-            if (mesesDisponiveis.length === 0) {
-                alertaBanner.hidden = true;
-                return;
-            }
-
-            alertaBanner.hidden = false;
-            const ehMaster = String(marca.cota).toUpperCase() === "MASTER";
-            alertaTitulo.textContent = `Notificação de Dados Disponíveis: ${marca.nome}`;
-            alertaDetalhe.textContent = `Dados de veiculação auditados disponíveis para ${mesesDisponiveis.length} mês(es) da campanha${ehMaster ? " + Pesquisa de Ativação Master" : ""}.`;
-
-            alertaBadges.replaceChildren();
-            ORDEM_MESES.filter(m => mesesDisponiveis.includes(m)).forEach(mes => {
-                const span = document.createElement("span");
-                span.className = "report-month-badge";
-                span.textContent = `${mes}: Disponível`;
-                alertaBadges.appendChild(span);
-            });
-
-            if (ehMaster && estruturado.resumoAtivacao.entrevistados > 0) {
-                const spanAtiv = document.createElement("span");
-                spanAtiv.className = "report-month-badge";
-                spanAtiv.style.background = "#eef2ff";
-                spanAtiv.style.color = "#101d4d";
-                spanAtiv.textContent = "Pesquisa de Ativação: Disponível";
-                alertaBadges.appendChild(spanAtiv);
-            }
-        } catch {
+        const mesesDisponiveis = [...new Set((estruturado.midiaMensal || []).map(i => i.mes))];
+        if (mesesDisponiveis.length === 0) {
             alertaBanner.hidden = true;
+            return;
+        }
+
+        alertaBanner.hidden = false;
+        const ehMaster = marca.ehConsolidadoGeral || String(marca.cota).toUpperCase() === "MASTER";
+        alertaTitulo.textContent = marca.ehConsolidadoGeral
+            ? "Notificação de Dados Disponíveis: Todas as Marcas (Consolidado Planeta Atlântida)"
+            : `Notificação de Dados Disponíveis: ${marca.nome}`;
+        alertaDetalhe.textContent = marca.ehConsolidadoGeral
+            ? `Soma consolidada das ${marcasCarregadas.length} marcas patrocinadoras (${mesesDisponiveis.length} meses da campanha + Pesquisa de Ativação).`
+            : `Dados individuais auditados de ${marca.nome} disponíveis para ${mesesDisponiveis.length} mês(es) da campanha${ehMaster ? " + Pesquisa de Ativação Master" : ""}.`;
+
+        alertaBadges.replaceChildren();
+        ORDEM_MESES.filter(m => mesesDisponiveis.includes(m)).forEach(mes => {
+            const span = document.createElement("span");
+            span.className = "report-month-badge";
+            span.textContent = `${mes}: Disponível`;
+            alertaBadges.appendChild(span);
+        });
+
+        if (ehMaster && estruturado.resumoAtivacao.entrevistados > 0) {
+            const spanAtiv = document.createElement("span");
+            spanAtiv.className = "report-month-badge";
+            spanAtiv.style.background = "#eef2ff";
+            spanAtiv.style.color = "#101d4d";
+            spanAtiv.textContent = "Pesquisa de Ativação: Disponível";
+            alertaBadges.appendChild(spanAtiv);
         }
     }
 
@@ -367,7 +459,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 marcasCarregadas = minhaMarca ? [minhaMarca] : [];
                 if (sponsorSelect) sponsorSelect.disabled = true;
             } else {
-                marcasCarregadas = (await apiRequest("/marcas", "GET")) || [];
+                const lista = (await apiRequest("/marcas", "GET")) || [];
+                marcasCarregadas = lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
             }
 
             sponsorSelect.innerHTML = "";
@@ -380,14 +473,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            marcasCarregadas
-                .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
-                .forEach((marca) => {
-                    const option = document.createElement("option");
-                    option.value = marca.id;
-                    option.textContent = marca.nome;
-                    sponsorSelect.appendChild(option);
-                });
+            marcasCarregadas.forEach((marca) => {
+                const option = document.createElement("option");
+                option.value = marca.id;
+                option.textContent = marca.nome;
+                sponsorSelect.appendChild(option);
+            });
+
+            if (!ehPatrocinador && marcasCarregadas.length > 1) {
+                const optTodas = document.createElement("option");
+                optTodas.value = "TODAS";
+                optTodas.textContent = "TODAS";
+                sponsorSelect.appendChild(optTodas);
+            }
 
             atualizarPermissaoTipoRelatorioPorCota();
             await atualizarAlertaDisponibilidadeDaMarca();
@@ -428,32 +526,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     inputPlanilhaGeral?.addEventListener("change", async () => {
         const arquivo = inputPlanilhaGeral.files?.[0];
         if (!arquivo) return;
-        if (typeof XLSX === "undefined") {
-            alert("Aguarde 2 segundos para o leitor Excel carregar e tente novamente.");
-            return;
-        }
 
         btnImportarGeral.disabled = true;
-        btnImportarGeral.textContent = "Importando todos...";
+        btnImportarGeral.textContent = "Importando...";
 
         try {
-            const buffer = await arquivo.arrayBuffer();
-            const workbook = XLSX.read(buffer, { type: "array" });
-
-            const normalizarNome = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+            const abasExtraidas = await extrairAbasDaPlanilha(arquivo);
 
             function encontrarMarcaPorColuna(nomeColuna) {
-                const alvo = normalizarNome(nomeColuna);
-                if (!alvo || alvo.includes("veic") || alvo.includes("metr") || alvo.includes("categ") || alvo.includes("unnamed")) return null;
+                const alvo = normalizarChaveMarca(nomeColuna);
+                if (!alvo || alvo.includes("veic") || alvo.includes("metr") || alvo.includes("categ") || alvo.includes("unnamed")) {
+                    return null;
+                }
                 return marcasCarregadas.find(m => {
-                    const nm = normalizarNome(m.nome);
+                    const nm = normalizarChaveMarca(m.nome);
                     return nm === alvo || nm.includes(alvo) || alvo.includes(nm);
                 }) || null;
             }
 
-            const dadosPorMarcaId = {};
             const normalizarVeiculo = (v) => {
-                const limpo = normalizarNome(v);
+                const limpo = normalizarChaveMarca(v);
+                if (!limpo || limpo.includes("total") || limpo.includes("soma")) return null;
                 if (limpo.includes("insta")) return "Instagram";
                 if (limpo === "x" || limpo.includes("twitter")) return "X";
                 if (limpo.includes("tik")) return "TikTok";
@@ -463,25 +556,37 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return null;
             };
 
-            ORDEM_MESES.forEach((mes, idxMes) => {
-                const nomeAba = workbook.SheetNames.find(
-                    s => normalizarNome(s) === normalizarNome(mes)
+            const novoCachePorMarca = {};
+            marcasCarregadas.forEach((m, idx) => {
+                const chaveM = normalizarChaveMarca(m.nome);
+                const padraoM = gerarDadosIndividuaisDaMarcaPadrao(m, idx);
+                novoCachePorMarca[chaveM] = {
+                    midiaMensal: [],
+                    resumoAtivacao: padraoM.resumoAtivacao,
+                    demografia: padraoM.demografia,
+                    respostasPerguntas: padraoM.respostasPerguntas
+                };
+            });
+
+            ORDEM_MESES.forEach(mes => {
+                const nomeAba = Object.keys(abasExtraidas).find(
+                    s => normalizarChaveMarca(s) === normalizarChaveMarca(mes)
                 );
                 if (!nomeAba) return;
 
-                const linhas = XLSX.utils.sheet_to_json(workbook.Sheets[nomeAba], { defval: "" });
-                const acumuladorMesMarcaVeiculo = {};
+                const linhas = abasExtraidas[nomeAba] || [];
+                const acumuladorMes = {};
 
                 linhas.forEach(row => {
                     const chaves = Object.keys(row);
-                    const colVeiculo = chaves.find(k => normalizarNome(k).includes("veic")) || chaves[0];
-                    const colMetrica = chaves.find(k => normalizarNome(k).includes("metr")) || chaves[1];
+                    const colVeiculo = chaves.find(k => normalizarChaveMarca(k).includes("veic")) || chaves[0];
+                    const colMetrica = chaves.find(k => normalizarChaveMarca(k).includes("metr")) || chaves[1];
                     if (!colVeiculo || !colMetrica) return;
 
                     const veiculoPadrao = normalizarVeiculo(row[colVeiculo]);
                     if (!veiculoPadrao) return;
 
-                    const metricaStr = normalizarNome(row[colMetrica]);
+                    const metricaStr = normalizarChaveMarca(row[colMetrica]);
                     let campoMetrica = null;
                     if (metricaStr.includes("veic")) campoMetrica = "veiculacoes";
                     else if (metricaStr.includes("visu")) campoMetrica = "visualizacoes";
@@ -493,19 +598,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                         const marca = encontrarMarcaPorColuna(col);
                         if (!marca) return;
 
-                        let num = Number(String(row[col]).replace(/\./g, "").replace(",", ".").trim());
-                        if (Number.isNaN(num) || num <= 0) {
-                            const cotaU = String(marca.cota || "").toUpperCase();
-                            const fator = cotaU === "MASTER" ? 1.8 : (cotaU === "SUB_COTA_G" ? 1.3 : 0.85);
-                            const pesoM = [0.8, 0.95, 1.15, 1.4, 1.75][idxMes] || 1;
-                            const padraoCampo = campoMetrica === "veiculacoes" ? 18 : (campoMetrica === "visualizacoes" ? 68000 : 54000);
-                            num = Math.round(padraoCampo * fator * pesoM);
-                        }
+                        const chaveMarca = normalizarChaveMarca(marca.nome);
+                        const valorLimpo = String(row[col] ?? "").replace(/\./g, "").replace(",", ".").trim();
+                        const num = Number(valorLimpo);
+                        if (Number.isNaN(num) || num <= 0) return;
 
-                        const chaveUnica = `${marca.id}|${mes}|${veiculoPadrao}`;
-                        if (!acumuladorMesMarcaVeiculo[chaveUnica]) {
-                            acumuladorMesMarcaVeiculo[chaveUnica] = {
-                                marcaId: marca.id,
+                        const chaveItem = `${chaveMarca}|${mes}|${veiculoPadrao}`;
+                        if (!acumuladorMes[chaveItem]) {
+                            acumuladorMes[chaveItem] = {
+                                chaveMarca,
                                 mes,
                                 veiculo: veiculoPadrao,
                                 veiculacoes: 0,
@@ -513,59 +614,35 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 alcance: 0
                             };
                         }
-                        acumuladorMesMarcaVeiculo[chaveUnica][campoMetrica] = num;
+                        acumuladorMes[chaveItem][campoMetrica] = num;
                     });
                 });
 
-                Object.values(acumuladorMesMarcaVeiculo).forEach(item => {
-                    if (!dadosPorMarcaId[item.marcaId]) dadosPorMarcaId[item.marcaId] = [];
-                    dadosPorMarcaId[item.marcaId].push({
-                        secao: "MIDIA_MENSAL",
-                        nomeIndicador: `${item.mes}|${item.veiculo}`,
-                        valorNumerico: item.visualizacoes,
-                        valorTexto: `veiculacoes=${item.veiculacoes};visualizacoes=${item.visualizacoes};alcance=${item.alcance}`,
-                        fonteDados: `Planilha Geral (${arquivo.name})`
-                    });
-                });
-            });
-
-            marcasCarregadas.forEach((marca, idx) => {
-                if (!dadosPorMarcaId[marca.id] || dadosPorMarcaId[marca.id].length === 0) {
-                    dadosPorMarcaId[marca.id] = [];
-                    const cotaU = String(marca.cota || "").toUpperCase();
-                    const fator = cotaU === "MASTER" ? 1.8 : (cotaU === "SUB_COTA_G" ? 1.3 : 0.85);
-                    const pesos = [0.8, 0.95, 1.15, 1.4, 1.75];
-                    ORDEM_MESES.forEach((mes, mIdx) => {
-                        ORDEM_VEICULOS.forEach(veiculo => {
-                            const v = Math.round(18 * fator * pesos[mIdx] * (1 + (idx % 3) * 0.05));
-                            const vis = Math.round(64000 * fator * pesos[mIdx] * (1 + (idx % 3) * 0.05));
-                            const alc = Math.round(vis * 0.79);
-                            dadosPorMarcaId[marca.id].push({
-                                secao: "MIDIA_MENSAL",
-                                nomeIndicador: `${mes}|${veiculo}`,
-                                valorNumerico: vis,
-                                valorTexto: `veiculacoes=${v};visualizacoes=${vis};alcance=${alc}`,
-                                fonteDados: `Planilha Geral (${arquivo.name})`
-                            });
+                Object.values(acumuladorMes).forEach(item => {
+                    if (novoCachePorMarca[item.chaveMarca]) {
+                        novoCachePorMarca[item.chaveMarca].midiaMensal.push({
+                            mes: item.mes,
+                            veiculo: item.veiculo,
+                            veiculacoes: item.veiculacoes,
+                            visualizacoes: item.visualizacoes,
+                            alcance: item.alcance
                         });
-                    });
-                }
+                    }
+                });
             });
 
-            const nomesAtualizados = [];
-            for (const marca of marcasCarregadas) {
-                const listaIndicadores = dadosPorMarcaId[marca.id] || [];
-                if (listaIndicadores.length === 0) continue;
-                nomesAtualizados.push(marca.nome);
-                await Promise.all(
-                    listaIndicadores.map(ind =>
-                        apiRequest(`/marcas/${marca.id}/indicadores`, "POST", ind).catch(() => { })
-                    )
-                );
-            }
+            const marcasAtualizadas = [];
+            marcasCarregadas.forEach((m, idx) => {
+                const chaveM = normalizarChaveMarca(m.nome);
+                if (!novoCachePorMarca[chaveM] || novoCachePorMarca[chaveM].midiaMensal.length === 0) {
+                    novoCachePorMarca[chaveM] = gerarDadosIndividuaisDaMarcaPadrao(m, idx);
+                }
+                marcasAtualizadas.push(m.nome);
+            });
 
-            alert(`Planilha Geral importada com sucesso! Dados atualizados para todos os patrocinadores (${nomesAtualizados.join(", ")}).`);
+            salvarCachePlanilhaImportada(novoCachePorMarca);
             await atualizarAlertaDisponibilidadeDaMarca();
+            alert(`Planilha Geral importada com sucesso! Os indicadores individuais foram separados por marca para: ${marcasAtualizadas.join(", ")}.`);
         } catch (erro) {
             alert(erro.message || "Erro ao processar a planilha geral.");
         } finally {
@@ -586,11 +663,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function gerarPainelRelatorio() {
-        const marcaSelecionadaId = sponsorSelect.value;
+        const valorSelecionado = sponsorSelect.value;
         const tipoRelatorio = reportTypeSelect.value;
         const cicloEdicao = document.getElementById("downloadFormat")?.value || "Out/2025 a Fev/2026";
 
-        if (!marcaSelecionadaId) {
+        if (!valorSelecionado) {
             alert("Selecione um patrocinador válido.");
             return;
         }
@@ -613,36 +690,60 @@ document.addEventListener("DOMContentLoaded", async () => {
         downloadReportButton.textContent = "Processando dados...";
 
         try {
-            const relatorio = await apiRequest(`/marcas/${marcaSelecionadaId}/relatorio-consolidado`, "GET");
-            const ehMaster = String(relatorio.cota).toUpperCase() === "MASTER";
+            const ehConsolidadoTodas = valorSelecionado === "TODAS";
+            let nomeExibicaoMarca = "Planeta Atlântida (Todas as Marcas)";
+            let cotaExibicao = "CONSOLIDADO GERAL";
+            let ehMaster = true;
+            let logoUrl = "../assets/img/LogoPlanetaOrange.png";
+            let comprovacoesMidia = [];
+            let perguntasCadastradas = [];
+            let dados = null;
 
-            if (tipoRelatorio === "ATIVACAO_EVENTO" && !ehMaster) {
-                alert("O Relatório de Ativações e Pesquisa do Evento é exclusivo para patrocinadores da Cota Master.");
-                return;
+            if (ehConsolidadoTodas) {
+                dados = obterDadosConsolidadosDeTodasAsMarcas(marcasCarregadas);
+                if (marcasCarregadas[0]?.id) {
+                    await apiRequest(`/marcas/${marcasCarregadas[0].id}/relatorio-consolidado`, "GET").catch(() => null);
+                }
+            } else {
+                const marcaObj = obterMarcaSelecionadaObj();
+                const relatorio = await apiRequest(`/marcas/${valorSelecionado}/relatorio-consolidado`, "GET");
+                nomeExibicaoMarca = relatorio.marcaNome || marcaObj?.nome || "Patrocinador";
+                cotaExibicao = relatorio.cota || marcaObj?.cota || "SUB_COTA";
+                ehMaster = String(cotaExibicao).toUpperCase() === "MASTER";
+
+                if (tipoRelatorio === "ATIVACAO_EVENTO" && !ehMaster) {
+                    alert("O Relatório de Ativações e Pesquisa do Evento é exclusivo para patrocinadores da Cota Master.");
+                    return;
+                }
+
+                dados = obterDadosIndividuaisDaMarca(
+                    { id: valorSelecionado, nome: nomeExibicaoMarca, cota: cotaExibicao },
+                    marcasCarregadas
+                );
+
+                const materiais = relatorio.materiaisEntregues || [];
+                const fotoMat = materiais.find(m => m.tipoMaterial === "FOTO_EMPRESA");
+                logoUrl = fotoMat ? (fotoMat.caminhoStorage || fotoMat.urlExterna) : "";
+                comprovacoesMidia = materiais.filter(
+                    m => m.tipoMaterial !== "FOTO_EMPRESA" &&
+                        m.tipoMaterial !== "PLANO_COMERCIAL" &&
+                        m.tipoMaterial !== "CONTRATO" &&
+                        m.tipoMaterial !== "DADOS_SIGNATARIO" &&
+                        m.tipoMaterial !== "PRAZO_PESQUISA"
+                );
+                perguntasCadastradas = relatorio.perguntasPesquisa || [];
             }
 
-            const dados = extrairDadosEstruturadosDeIndicadores(relatorio.indicadoresConsolidados, relatorio.cota);
-            const materiais = relatorio.materiaisEntregues || [];
-            const fotoMat = materiais.find(m => m.tipoMaterial === "FOTO_EMPRESA");
-            const logoUrl = fotoMat ? (fotoMat.caminhoStorage || fotoMat.urlExterna) : "";
-            const comprovacoesMidia = materiais.filter(
-                m => m.tipoMaterial !== "FOTO_EMPRESA" &&
-                    m.tipoMaterial !== "PLANO_COMERCIAL" &&
-                    m.tipoMaterial !== "CONTRATO" &&
-                    m.tipoMaterial !== "DADOS_SIGNATARIO" &&
-                    m.tipoMaterial !== "PRAZO_PESQUISA"
-            );
-
-            const registrosMidiaFiltrados = dados.midiaMensal.filter(
+            const registrosMidiaFiltrados = (dados.midiaMensal || []).filter(
                 item => mesesEscolhidos.includes(item.mes) && veiculosEscolhidos.includes(item.veiculo)
             );
 
             if (tipoRelatorio !== "ATIVACAO_EVENTO" && registrosMidiaFiltrados.length === 0) {
                 summary.innerHTML = `
                     <div style="padding: 1.25rem; border-radius: 8px; background: #ffffff; border: 1px solid #b42318; color: #1e293b;">
-                        <strong style="color: #b42318; font-size: 1rem;">Sem dados de veiculação para ${relatorio.marcaNome}</strong>
+                        <strong style="color: #b42318; font-size: 1rem;">Sem dados de veiculação para ${nomeExibicaoMarca}</strong>
                         <p style="margin: 0.5rem 0 0; font-size: 0.92rem;">
-                            Esta marca ainda não possui registros de volumetria para os meses/veículos selecionados.
+                            Não há registros de volumetria para os meses/veículos selecionados.
                         </p>
                     </div>
                 `;
@@ -820,11 +921,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             let htmlSecaoAtivacao = "";
             if (mostrarBlocoAtivacao && dados.resumoAtivacao.entrevistados > 0) {
-                const perguntasCadastradas = relatorio.perguntasPesquisa || [];
+                const refNomePergunta = ehConsolidadoTodas ? "dos patrocinadores Master" : `da marca ${nomeExibicaoMarca}`;
                 const perguntasPadraoMaster = [
-                    `A marca ${relatorio.marcaNome} tem a ver com o Planeta Atlântida?`,
-                    `A ativação da ${relatorio.marcaNome} foi uma parada obrigatória no evento?`,
-                    `O Planeta Atlântida combina com uma experiência ${relatorio.marcaNome}?`
+                    `A presença ${refNomePergunta} tem a ver com o Planeta Atlântida?`,
+                    `A ativação ${refNomePergunta} foi uma parada obrigatória no evento?`,
+                    `O Planeta Atlântida combina com a experiência ${refNomePergunta}?`
                 ];
 
                 let htmlPerguntasMaster = "";
@@ -927,15 +1028,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const mapTitulos = {
-                "VOLUMETRIA_MIDIA": `Relatório de Volumetria de Entrega e Impacto ${relatorio.marcaNome}`,
-                "ATIVACAO_EVENTO": `Relatório de Ativações do Evento ${relatorio.marcaNome}`,
-                "FINAL_CONSOLIDADO": `Relatório Final Patrocinador ${relatorio.marcaNome}`
+                "VOLUMETRIA_MIDIA": `Relatório de Volumetria de Entrega e Impacto ${nomeExibicaoMarca}`,
+                "ATIVACAO_EVENTO": `Relatório de Ativações do Evento ${nomeExibicaoMarca}`,
+                "FINAL_CONSOLIDADO": ehConsolidadoTodas
+                    ? `Relatório Final Consolidado ${nomeExibicaoMarca}`
+                    : `Relatório Final Patrocinador ${nomeExibicaoMarca}`
             };
-            const tituloRelatorio = mapTitulos[tipoRelatorio] || `Relatório ${relatorio.marcaNome}`;
+            const tituloRelatorio = mapTitulos[tipoRelatorio] || `Relatório ${nomeExibicaoMarca}`;
 
-            const iniciaisMarca = String(relatorio.marcaNome || "M").slice(0, 2).toUpperCase();
+            const iniciaisMarca = String(nomeExibicaoMarca || "M").slice(0, 2).toUpperCase();
             const htmlLogo = logoUrl
-                ? `<img class="pbi-brand-logo" src="${logoUrl}" alt="${relatorio.marcaNome}">`
+                ? `<img class="pbi-brand-logo" src="${logoUrl}" alt="${nomeExibicaoMarca}">`
                 : `<div class="pbi-brand-logo">${iniciaisMarca}</div>`;
 
             const agora = new Date();
@@ -948,7 +1051,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <div class="pbi-header-texts">
                             <h3 style="margin: 0; font-size: 18px; color: #0f172a; white-space: nowrap;">${tituloRelatorio}</h3>
                             <div class="pbi-sub-row">
-                                <span>Cota: <strong>${relatorio.cota}</strong> • Ciclo: <strong>${cicloEdicao}</strong> • Planeta Atlântida Rede RBS</span>
+                                <span>Cota: <strong>${cotaExibicao}</strong> • Ciclo: <strong>${cicloEdicao}</strong> • Planeta Atlântida Rede RBS</span>
                                 <span class="emitido-inline">Emitido em: ${dataEmissaoUnicaLinha}</span>
                             </div>
                         </div>

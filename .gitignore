@@ -1,10 +1,8 @@
-# Arquivos de Sistema e IDE
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 
-# Scripts temporários de migração e backups locais
 *.ps1
 *.bak
 *.zip

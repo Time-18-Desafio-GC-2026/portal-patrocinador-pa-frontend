@@ -105,16 +105,16 @@ document.addEventListener("DOMContentLoaded", () => {
                           style="height:38px;padding:0 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;">
                   </div>
                   <p id="msgFeedbackRecuperacao" style="margin:0;font-size:12px;font-weight:600;min-height:16px;"></p>
-                  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
-                      <button type="button" id="cancelarModalRecuperacao"
-                          style="height:36px;padding:0 14px;border-radius:6px;border:1px solid #b42318;background:#b42318;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">
-                          Cancelar
-                      </button>
-                      <button type="submit" id="btnEnviarRecuperacao"
-                          style="height:36px;padding:0 16px;border-radius:6px;border:1px solid #d95d0b;background:#f47b20;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">
-                          Solicitar Redefinição
-                      </button>
-                  </div>
+                  <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:6px;">
+                        <button type="button" id="cancelarModalRecuperacao"
+                            style="margin:0 !important;width:auto !important;height:38px !important;min-height:38px !important;padding:0 16px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;border-radius:6px;border:1px solid #b42318;background:#b42318;color:#fff;font-size:12px;font-weight:700;line-height:1;cursor:pointer;box-sizing:border-box;">
+                            Cancelar
+                        </button>
+                        <button type="submit" id="btnEnviarRecuperacao"
+                            style="margin:0 !important;width:auto !important;height:38px !important;min-height:38px !important;padding:0 16px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;border-radius:6px;border:1px solid #d95d0b;background:#f47b20;color:#fff;font-size:12px;font-weight:700;line-height:1;cursor:pointer;box-sizing:border-box;">
+                            Solicitar Redefinição
+                        </button>
+                    </div>
               </form>
           </div>
       `;

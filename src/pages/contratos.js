@@ -182,10 +182,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             btnReenviar.textContent = "Enviando...";
 
             try {
-                if (estadoAtualCache?.pdfAtivo?.id) {
-                    await apiRequest(`/materiais/${estadoAtualCache.pdfAtivo.id}`, "DELETE").catch(() => { });
-                }
-                const novoMat = await apiUploadMaterial(marcaId, {
+                await apiUploadMaterial(marcaId, {
                     titulo: arquivo.name,
                     descricao: "Contrato consolidado e assinado pelo patrocinador",
                     abaDestino: "ABA_7_CONTRATO",
@@ -194,16 +191,13 @@ document.addEventListener("DOMContentLoaded", async function () {
                     urlExterna: null
                 }, arquivo);
 
-                if (novoMat?.id) {
-                    await apiRequest(`/materiais/${novoMat.id}/status`, "PATCH", {
-                        status: "CONTRATO_CONSOLIDADO"
-                    }).catch(() => { });
-                }
-
                 formReenviar.reset();
                 msgUploadCliente.style.color = "#15803d";
                 msgUploadCliente.textContent = "Contrato assinado enviado e consolidado com sucesso!";
                 await carregarContratoDoPatrocinador();
+                if (typeof window.atualizarNotificacoesPlataforma === "function") {
+                    await window.atualizarNotificacoesPlataforma();
+                }
             } catch (erro) {
                 msgUploadCliente.style.color = "#b42318";
                 msgUploadCliente.textContent = erro.message || "Não foi possível enviar o contrato assinado.";

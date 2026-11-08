@@ -1421,9 +1421,9 @@ document.addEventListener("DOMContentLoaded", async function () {
             box.innerHTML = `
                 <strong>${setor}</strong>
                 <div class="modal-cortesia-inputs">
-                    <label>Pass.<input type="number" min="0" value="0" data-setor="${setor}" data-tipo="passaporte"></label>
+                    <label>Passaporte<input type="number" min="0" value="0" data-setor="${setor}" data-tipo="passaporte"></label>
                     <label>Sexta<input type="number" min="0" value="0" data-setor="${setor}" data-tipo="sexta"></label>
-                    <label>Sáb.<input type="number" min="0" value="0" data-setor="${setor}" data-tipo="sabado"></label>
+                    <label>Sábado<input type="number" min="0" value="0" data-setor="${setor}" data-tipo="sabado"></label>
                 </div>
             `;
             modalCortesiasGrid.appendChild(box);

@@ -2304,9 +2304,6 @@ img.pbi-brand-logo {
     top: calc(100% + 10px);
     right: 0;
     width: min(380px, calc(100vw - 28px));
-    max-height: 420px;
-    display: flex;
-    flex-direction: column;
     background: #ffffff;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -2344,9 +2341,10 @@ img.pbi-brand-logo {
 }
 
 .notif-list {
-    overflow-y: auto;
-    max-height: 360px;
-    divide-y: 1px solid var(--border-soft);
+    display: block;
+    max-height: 290px;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
 }
 
 .notif-item {
@@ -2396,6 +2394,170 @@ img.pbi-brand-logo {
     font-size: 12.5px;
 }
 
+.dynamic-emails-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding-right: 0 !important;
+    margin-bottom: 4px;
+}
+
+.dynamic-emails-scroll {
+    max-height: 124px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 0 !important;
+}
+
+.dynamic-email-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.dynamic-email-row input {
+    flex: 1;
+    height: 34px !important;
+    padding: 0 10px;
+}
+
+.btn-icon-add,
+.btn-icon-remove {
+    width: 28px !important;
+    height: 28px !important;
+    flex: 0 0 28px !important;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px !important;
+    font-weight: 800;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.new-sponsor-form select,
+#newSponsorForm select,
+.form-group select {
+    width: 100% !important;
+    min-width: 220px;
+    padding: 0 12px !important;
+}
+
+.new-sponsor-form.open,
+#newSponsorForm.open,
+.modal-primeiro-acesso-box {
+    scrollbar-width: thin;
+    clip-path: inset(0 round 12px);
+}
+
+.new-sponsor-form.open::-webkit-scrollbar,
+#newSponsorForm.open::-webkit-scrollbar {
+    width: 7px;
+}
+
+.new-sponsor-form.open::-webkit-scrollbar-track,
+#newSponsorForm.open::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 12px 0;
+}
+
+.new-sponsor-form.open::-webkit-scrollbar-thumb,
+#newSponsorForm.open::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+
+.modal-cortesias-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+}
+
+.modal-cortesia-card {
+    display: grid !important;
+    grid-template-columns: 95px 1fr !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 8px 10px !important;
+    background: #ffffff;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+}
+
+.modal-cortesia-card strong {
+    margin: 0 !important;
+    font-size: 12.5px !important;
+    color: var(--rbs-blue);
+}
+
+.modal-cortesia-inputs {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+}
+
+.modal-cortesia-inputs label {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+    font-size: 10.5px !important;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.modal-cortesia-inputs input {
+    width: 100% !important;
+    height: 30px !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
+    text-align: center;
+}
+
+.patrocinadores-topo {
+    align-items: flex-start !important;
+}
+
+.patrocinadores-titulos p {
+    white-space: nowrap;
+}
+
+.barra-controles-pesquisa-topo {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-left: auto;
+    width: 390px;
+}
+
+.barra-controles-pesquisa-topo .pesquisa-prazo-bloco,
+.barra-controles-pesquisa-topo .filtro-compacto-direita {
+    width: 100% !important;
+    margin-left: 0 !important;
+    justify-content: space-between;
+    box-sizing: border-box;
+}
+
+.barra-controles-pesquisa-topo .pesquisa-prazo-bloco input[type="date"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.barra-controles-pesquisa-topo .filtro-compacto-direita input[type="search"] {
+    flex: 1;
+    width: auto !important;
+    min-width: 0;
+}
 
 .filtro-compacto-direita {
     display: inline-flex;
@@ -2406,13 +2568,11 @@ img.pbi-brand-logo {
     border-radius: 10px;
     background: linear-gradient(110deg, var(--rbs-yellow) 0%, var(--rbs-orange) 100%);
     box-shadow: 0 4px 12px rgba(217, 93, 11, 0.12);
-    width: auto;
-    max-width: 100%;
 }
 
 .filtro-compacto-direita input[type="search"] {
-    width: 250px;
-    height: 36px;
+    width: 240px;
+    height: 34px;
     padding: 0 12px;
     border: 1px solid rgba(91, 62, 41, 0.12);
     border-radius: 6px;
@@ -2420,16 +2580,6 @@ img.pbi-brand-logo {
     color: #344054;
     font-size: 12px;
 }
-
-.barra-controles-pesquisa-topo {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-left: auto;
-}
-
 
 .form-novo-envio-rbs {
     margin-top: 12px;

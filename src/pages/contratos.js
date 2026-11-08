@@ -39,7 +39,8 @@ document.addEventListener("DOMContentLoaded", async function () {
                 pdfAtivo: pdfConsolidado
             };
         }
-        if (pdfEnviadoRbs) {
+
+        if (pdfEnviadoRbs && signatario?.nome) {
             return {
                 codigo: "ENVIADO",
                 rotulo: "Contrato Enviado",
@@ -50,6 +51,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 pdfAtivo: pdfEnviadoRbs
             };
         }
+
         return {
             codigo: "PENDENTE",
             rotulo: "Dados Pendentes",
@@ -60,7 +62,6 @@ document.addEventListener("DOMContentLoaded", async function () {
             pdfAtivo: null
         };
     }
-
 
     if (ehPatrocinador) {
         if (visaoPatrocinador) visaoPatrocinador.hidden = false;
@@ -158,8 +159,13 @@ document.addEventListener("DOMContentLoaded", async function () {
                     caminhoStorage: null,
                     urlExterna: "https://portal.rbs.com.br/signatario"
                 }, null);
+
+                msgSignatario.style.color = "#15803d";
                 msgSignatario.textContent = "Dados do representante salvos com sucesso!";
                 await carregarContratoDoPatrocinador();
+                if (typeof window.atualizarNotificacoesPlataforma === "function") {
+                    await window.atualizarNotificacoesPlataforma();
+                }
             } catch (erro) {
                 msgSignatario.style.color = "#b42318";
                 msgSignatario.textContent = erro.message || "Erro ao salvar dados do representante.";
@@ -195,6 +201,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 }
 
                 formReenviar.reset();
+                msgUploadCliente.style.color = "#15803d";
                 msgUploadCliente.textContent = "Contrato assinado enviado e consolidado com sucesso!";
                 await carregarContratoDoPatrocinador();
             } catch (erro) {
@@ -209,7 +216,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         await carregarContratoDoPatrocinador();
         return;
     }
-
 
     if (visaoAdmin) visaoAdmin.hidden = false;
     const containerAccordion = document.getElementById("listaContratosAccordion");
@@ -255,75 +261,114 @@ document.addEventListener("DOMContentLoaded", async function () {
             body.className = "pesquisa-accordion-body";
             body.hidden = true;
 
-            const infoSignatario = estado.signatario
-                ? `<strong>Representante Legal:</strong> ${estado.signatario.nome} — <strong>Cargo:</strong> ${estado.signatario.cargo}`
+            const temSignatario = Boolean(estado.signatario?.nome);
+            const infoSignatario = temSignatario
+                ? `<strong>Representante Legal:</strong> ${estado.signatario.nome} - <strong>Cargo:</strong> ${estado.signatario.cargo}`
                 : `<em style="color: #b42318;">O patrocinador ainda não preencheu o nome e cargo de quem assinará o contrato.</em>`;
 
             const urlPdf = estado.pdfAtivo ? (estado.pdfAtivo.caminhoStorage || estado.pdfAtivo.urlExterna) : "";
 
-            body.innerHTML = `
-                <div class="pesquisa-linha-pergunta" style="margin-bottom: 10px;">
-                    ${infoSignatario}
-                </div>
-                <div class="pesquisa-linha-pergunta" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <div>
-                        <strong>Arquivo do Contrato:</strong>
-                        ${estado.pdfAtivo ? `<span>${estado.pdfAtivo.titulo} (${estado.rotulo})</span>` : `<span style="color:#64748b;">Nenhum PDF enviado ainda.</span>`}
+            if (!temSignatario) {
+                body.innerHTML = `
+                    <div class="pesquisa-linha-pergunta" style="margin-bottom: 10px;">
+                        ${infoSignatario}
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        ${urlPdf && urlPdf !== "#" ? `<a href="${urlPdf}" target="_blank" rel="noopener noreferrer" download="${estado.pdfAtivo.titulo}" class="btn-acao-pequeno">Visualizar / Baixar PDF</a>` : ""}
-                        <button type="button" class="button button-primary btn-upload-contrato-rbs">
-                            ${estado.pdfAtivo ? "Substituir Contrato (PDF)" : "Enviar Contrato Assinado pela RBS (PDF)"}
+                    <div class="pesquisa-linha-pergunta" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <strong>Status do Contrato:</strong>
+                            <span style="color:#64748b;">Aguardando o envio dos dados do representante legal pelo patrocinador para liberar o envio do contrato.</span>
+                        </div>
+                        <button type="button" class="button button-primary btn-notificar-parceiro-contrato">
+                            Notificar Marca Parceira
                         </button>
-                        <input type="file" accept=".pdf,application/pdf" class="input-hidden-pdf-rbs" hidden>
                     </div>
-                </div>
-            `;
+                `;
+
+                const btnNotificar = body.querySelector(".btn-notificar-parceiro-contrato");
+                btnNotificar.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    btnNotificar.disabled = true;
+                    btnNotificar.textContent = "Notificando...";
+                    try {
+                        await apiRequest(`/marcas/${marca.id}/indicadores`, "POST", {
+                            secao: "SISTEMA_NOTIF",
+                            nomeIndicador: "COBRANCA_CONTRATO",
+                            valorNumerico: 1,
+                            valorTexto: String(Date.now()),
+                            fonteDados: "Notificação de Pendência Contratual RBS"
+                        });
+                        alert(`Notificação enviada com sucesso para ${marca.nome}! O aviso aparecerá em destaque no sino de notificações da marca.`);
+                    } catch (erro) {
+                        alert(erro.message || "Não foi possível enviar a notificação.");
+                    } finally {
+                        btnNotificar.disabled = false;
+                        btnNotificar.textContent = "Notificar Marca Parceira";
+                    }
+                });
+            } else {
+                body.innerHTML = `
+                    <div class="pesquisa-linha-pergunta" style="margin-bottom: 10px;">
+                        ${infoSignatario}
+                    </div>
+                    <div class="pesquisa-linha-pergunta" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <strong>Arquivo do Contrato:</strong>
+                            ${estado.pdfAtivo ? `<span>${estado.pdfAtivo.titulo} (${estado.rotulo})</span>` : `<span style="color:#64748b;">Nenhum PDF enviado ainda.</span>`}
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            ${urlPdf && urlPdf !== "#" ? `<a href="${urlPdf}" target="_blank" rel="noopener noreferrer" download="${estado.pdfAtivo.titulo}" class="btn-acao-pequeno">Visualizar / Baixar PDF</a>` : ""}
+                            <button type="button" class="button button-primary btn-upload-contrato-rbs">
+                                ${estado.pdfAtivo ? "Substituir Contrato (PDF)" : "Enviar Contrato Assinado pela RBS (PDF)"}
+                            </button>
+                            <input type="file" accept=".pdf,application/pdf" class="input-hidden-pdf-rbs" hidden>
+                        </div>
+                    </div>
+                `;
+
+                const btnUpload = body.querySelector(".btn-upload-contrato-rbs");
+                const inputPdf = body.querySelector(".input-hidden-pdf-rbs");
+
+                btnUpload.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    inputPdf.click();
+                });
+
+                inputPdf.addEventListener("change", async () => {
+                    const arquivo = inputPdf.files?.[0];
+                    if (!arquivo) return;
+                    btnUpload.disabled = true;
+                    btnUpload.textContent = "Enviando...";
+                    try {
+                        for (const p of todosPdfs) {
+                            await apiRequest(`/materiais/${p.id}`, "DELETE").catch(() => { });
+                        }
+                        const novo = await apiUploadMaterial(marca.id, {
+                            titulo: arquivo.name,
+                            descricao: "Contrato preenchido e assinado pela RBS",
+                            abaDestino: "ABA_7_CONTRATO",
+                            tipoMaterial: "CONTRATO",
+                            caminhoStorage: null,
+                            urlExterna: null
+                        }, arquivo);
+                        if (novo?.id) {
+                            await apiRequest(`/materiais/${novo.id}/status`, "PATCH", {
+                                status: "CONTRATO_ENVIADO"
+                            }).catch(() => { });
+                        }
+                        await carregarContratosAdmin();
+                    } catch (erro) {
+                        alert(erro.message || "Erro ao enviar o PDF do contrato.");
+                    } finally {
+                        btnUpload.disabled = false;
+                    }
+                });
+            }
 
             const btnToggle = header.querySelector(".botao-recolher");
             header.addEventListener("click", () => {
                 const vaiFechar = !body.hidden;
                 body.hidden = vaiFechar;
                 btnToggle.setAttribute("aria-expanded", String(!vaiFechar));
-            });
-
-            const btnUpload = body.querySelector(".btn-upload-contrato-rbs");
-            const inputPdf = body.querySelector(".input-hidden-pdf-rbs");
-
-            btnUpload.addEventListener("click", (e) => {
-                e.stopPropagation();
-                inputPdf.click();
-            });
-
-            inputPdf.addEventListener("change", async () => {
-                const arquivo = inputPdf.files?.[0];
-                if (!arquivo) return;
-                btnUpload.disabled = true;
-                btnUpload.textContent = "Enviando...";
-                try {
-                    for (const p of todosPdfs) {
-                        await apiRequest(`/materiais/${p.id}`, "DELETE").catch(() => { });
-                    }
-                    const novo = await apiUploadMaterial(marca.id, {
-                        titulo: arquivo.name,
-                        descricao: "Contrato preenchido e assinado pela RBS",
-                        abaDestino: "ABA_7_CONTRATO",
-                        tipoMaterial: "CONTRATO",
-                        caminhoStorage: null,
-                        urlExterna: null
-                    }, arquivo);
-
-                    if (novo?.id) {
-                        await apiRequest(`/materiais/${novo.id}/status`, "PATCH", {
-                            status: "CONTRATO_ENVIADO"
-                        }).catch(() => { });
-                    }
-                    await carregarContratosAdmin();
-                } catch (erro) {
-                    alert(erro.message || "Erro ao enviar o PDF do contrato.");
-                } finally {
-                    btnUpload.disabled = false;
-                }
             });
 
             item.append(header, body);

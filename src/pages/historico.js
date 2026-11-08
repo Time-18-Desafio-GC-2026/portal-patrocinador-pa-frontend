@@ -31,6 +31,10 @@ var TEXTOS_PERSONALIZADOS_ACOES = {
 var historicoServidorCache = [];
 var limiteVisivelAtual = TAMANHO_PAGINA_LOGS;
 
+function limparMarcaDuplicada(texto) {
+    return String(texto || "").replace(/(\([^)]+\))\s*\1+/g, "$1").trim();
+}
+
 function registrarHistorico(acao, emailAtor) {
     try {
         var historico = JSON.parse(localStorage.getItem(HISTORICO_KEY) || "[]");
@@ -38,7 +42,7 @@ function registrarHistorico(acao, emailAtor) {
         historico.push({
             email: emailAtor || sessionStorage.getItem(USUARIO_EMAIL_KEY) || "admin@rbs.com.br",
             codigoAcao: "ACAO_PORTAL",
-            acao: acao,
+            acao: limparMarcaDuplicada(acao),
             dataHora: new Date().toISOString()
         });
         localStorage.setItem(HISTORICO_KEY, JSON.stringify(historico));
@@ -58,7 +62,6 @@ async function carregarAuditoriaDoBackend() {
             apiRequest("/usuarios", "GET").catch(() => [])
         ]);
 
-
         const mapaEmails = {};
         (usuariosApi || []).forEach(u => {
             if (u.id) mapaEmails[String(u.id)] = u.email;
@@ -74,9 +77,15 @@ async function carregarAuditoriaDoBackend() {
 
                 const codigoAcao = log.acao || "ACAO_PORTAL";
                 const rotuloPadrao = TEXTOS_PERSONALIZADOS_ACOES[codigoAcao] || codigoAcao;
-                const textoAcao = log.detalhe
-                    ? (log.marcaNome ? `${log.detalhe} (${log.marcaNome})` : log.detalhe)
-                    : rotuloPadrao;
+                const detalheStr = String(log.detalhe || "").trim();
+                const marcaStr = String(log.marcaNome || "").trim();
+
+                let textoBruto = detalheStr || rotuloPadrao;
+                if (marcaStr && !textoBruto.toLowerCase().includes(marcaStr.toLowerCase())) {
+                    textoBruto = `${textoBruto} (${marcaStr})`;
+                }
+
+                const textoAcao = limparMarcaDuplicada(textoBruto);
 
                 return {
                     id: log.id,
@@ -170,7 +179,7 @@ function renderizarHistorico() {
             registro.email || "admin@rbs.com.br",
             dataHora.toLocaleDateString("pt-BR"),
             dataHora.toLocaleTimeString("pt-BR"),
-            registro.acao
+            limparMarcaDuplicada(registro.acao)
         ].forEach((valor) => {
             const celula = document.createElement("td");
             celula.textContent = valor;
@@ -211,7 +220,7 @@ function exportarRelatorioAuditoriaPdf() {
                 <td>${reg.email}</td>
                 <td>${d.toLocaleDateString("pt-BR")}</td>
                 <td>${d.toLocaleTimeString("pt-BR")}</td>
-                <td>${reg.acao}</td>
+                <td>${limparMarcaDuplicada(reg.acao)}</td>
             </tr>
         `;
     }).join("");
@@ -227,7 +236,7 @@ function exportarRelatorioAuditoriaPdf() {
         <html lang="pt-BR">
         <head>
             <meta charset="UTF-8">
-            <title>Relatório de Comprovação e Auditoria — Portal RBS</title>
+            <title>Relatório de Comprovação e Auditoria: Portal RBS</title>
             <style>
                 body { font-family: Arial, sans-serif; color: #1e293b; margin: 32px; }
                 .header { border-bottom: 3px solid #f47b20; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; }

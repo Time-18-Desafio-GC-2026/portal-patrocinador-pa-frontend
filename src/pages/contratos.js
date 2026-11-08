@@ -148,9 +148,6 @@ document.addEventListener("DOMContentLoaded", async function () {
             if (!nome || !cargo) return;
 
             try {
-                if (estadoAtualCache?.regSignatario?.id) {
-                    await apiRequest(`/materiais/${estadoAtualCache.regSignatario.id}`, "DELETE").catch(() => { });
-                }
                 await apiUploadMaterial(marcaId, {
                     titulo: `Representante Legal: ${nome} (${cargo})`,
                     descricao: JSON.stringify({ nome, cargo }),
@@ -257,7 +254,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
             const temSignatario = Boolean(estado.signatario?.nome);
             const infoSignatario = temSignatario
-                ? `<strong>Representante Legal:</strong> ${estado.signatario.nome} - <strong>Cargo:</strong> ${estado.signatario.cargo}`
+                ? `<strong>Representante Legal:</strong> ${estado.signatario.nome} — <strong>Cargo:</strong> ${estado.signatario.cargo}`
                 : `<em style="color: #b42318;">O patrocinador ainda não preencheu o nome e cargo de quem assinará o contrato.</em>`;
 
             const urlPdf = estado.pdfAtivo ? (estado.pdfAtivo.caminhoStorage || estado.pdfAtivo.urlExterna) : "";
@@ -284,14 +281,15 @@ document.addEventListener("DOMContentLoaded", async function () {
                     btnNotificar.disabled = true;
                     btnNotificar.textContent = "Notificando...";
                     try {
-                        await apiRequest(`/marcas/${marca.id}/indicadores`, "POST", {
-                            secao: "SISTEMA_NOTIF",
-                            nomeIndicador: "COBRANCA_CONTRATO",
-                            valorNumerico: 1,
-                            valorTexto: String(Date.now()),
-                            fonteDados: "Notificação de Pendência Contratual RBS"
-                        });
-                        alert(`Notificação enviada com sucesso para ${marca.nome}! O aviso aparecerá em destaque no sino de notificações da marca.`);
+                        await apiUploadMaterial(marca.id, {
+                            titulo: `Notificação de Pendência Contratual (${new Date().toLocaleDateString("pt-BR")})`,
+                            descricao: String(Date.now()),
+                            abaDestino: "ABA_7_CONTRATO",
+                            tipoMaterial: "COBRANCA_CONTRATO",
+                            caminhoStorage: null,
+                            urlExterna: "https://portal.rbs.com.br/notificacao-contrato"
+                        }, null);
+                        alert(`Notificação registrada no banco para ${marca.nome}! O aviso aparecerá no sino de notificações da marca.`);
                     } catch (erro) {
                         alert(erro.message || "Não foi possível enviar a notificação.");
                     } finally {

@@ -46,7 +46,7 @@ function verificarEExibirModalPrimeiroAcesso(sessao) {
     modal.innerHTML = `
         <div class="form-header">
             <div>
-                <h3>Primeiro Acesso: Segurança Obrigatória</h3>
+                <h3>Primeiro Acesso — Segurança Obrigatória</h3>
                 <p>Por segurança, personalize seu nome de exibição e substitua a senha padrão inicial antes de utilizar a plataforma.</p>
             </div>
         </div>
@@ -134,22 +134,15 @@ async function carregarNotificacoesDaPlataforma(sessao) {
             const marcaId = sessao.patrocinadorId;
             const ehMaster = String(sessao.marcaCota || "").toUpperCase() === "MASTER";
 
-            const [materiais, perguntas, indicadores, faqPublicadas] = await Promise.all([
+            const [materiais, perguntas, faqPublicadas] = await Promise.all([
                 apiRequest(`/marcas/${marcaId}/materiais`, "GET").catch(() => []),
                 ehMaster ? apiRequest(`/marcas/${marcaId}/pesquisa-perguntas`, "GET").catch(() => []) : Promise.resolve([]),
-                apiRequest(`/marcas/${marcaId}/indicadores`, "GET").catch(() => []),
                 apiRequest("/faq", "GET").catch(() => [])
             ]);
 
-            for (const m of (materiais || [])) {
-                if (m.tipoMaterial === "PRAZO_PESQUISA") {
-                    apiRequest(`/materiais/${m.id}`, "DELETE").catch(() => { });
-                }
-            }
-
             if (ehMaster) {
-                const indPrazo = (indicadores || []).find(i => i.secao === "SISTEMA_CONFIG" && i.nomeIndicador === "PRAZO_PESQUISA");
-                const dataIso = indPrazo?.valorTexto || localStorage.getItem(PRAZO_PESQUISA_KEY) || "";
+                const matPrazo = (materiais || []).find(m => m.tipoMaterial === "PRAZO_PESQUISA");
+                const dataIso = matPrazo?.descricao || localStorage.getItem(PRAZO_PESQUISA_KEY) || "";
                 const qtdPerguntas = (perguntas || []).length;
 
                 if (dataIso && qtdPerguntas < 3) {
@@ -195,11 +188,11 @@ async function carregarNotificacoesDaPlataforma(sessao) {
 
             const temSignatario = (materiais || []).some(m => m.tipoMaterial === "DADOS_SIGNATARIO");
             const pdfContrato = (materiais || []).find(m => m.tipoMaterial === "CONTRATO");
-            const cobrancasRbs = (indicadores || []).filter(i => i.secao === "SISTEMA_NOTIF" && i.nomeIndicador === "COBRANCA_CONTRATO");
-            const ultimaCobranca = cobrancasRbs.length > 0 ? cobrancasRbs[cobrancasRbs.length - 1] : null;
+            const cobrancasRbs = (materiais || []).filter(m => m.tipoMaterial === "COBRANCA_CONTRATO");
+            const ultimaCobranca = cobrancasRbs.length > 0 ? cobrancasRbs[0] : null;
 
             if (!temSignatario) {
-                const sufixoCobranca = ultimaCobranca ? `_${ultimaCobranca.valorTexto}` : "";
+                const sufixoCobranca = ultimaCobranca ? `_${ultimaCobranca.id}` : "";
                 notificacoes.push({
                     id: `contrato_sem_signatario_${marcaId}${sufixoCobranca}`,
                     titulo: "Contrato: Dados Pendentes",
@@ -229,26 +222,27 @@ async function carregarNotificacoesDaPlataforma(sessao) {
                     m.tipoMaterial !== "CONTRATO" &&
                     m.tipoMaterial !== "DADOS_SIGNATARIO" &&
                     m.tipoMaterial !== "FOTO_EMPRESA" &&
-                    m.tipoMaterial !== "PRAZO_PESQUISA"
+                    m.tipoMaterial !== "PRAZO_PESQUISA" &&
+                    m.tipoMaterial !== "DADOS_VOLUMETRIA" &&
+                    m.tipoMaterial !== "COBRANCA_CONTRATO"
             );
             enviosRbs.slice(0, 4).forEach(m => {
                 notificacoes.push({
                     id: `midia_rbs_${m.id}`,
                     titulo: "Novo material publicado pela RBS",
-                    descricao: `${m.titulo}${m.descricao ? ": " + m.descricao : ""}`,
+                    descricao: `${m.titulo}${m.descricao ? " — " + m.descricao : ""}`,
                     link: "indexPatrocinador.html"
                 });
             });
 
-            const mesesMidia = [...new Set(
-                (indicadores || []).filter(i => i.secao === "MIDIA_MENSAL" && String(i.nomeIndicador).includes("|"))
-                    .map(i => i.nomeIndicador.split("|")[0])
-            )];
-            if (mesesMidia.length > 0) {
+            const mesesVol = (materiais || [])
+                .filter(m => m.tipoMaterial === "DADOS_VOLUMETRIA" && String(m.titulo).startsWith("VOL_MES:"))
+                .map(m => m.titulo.replace("VOL_MES:", ""));
+            if (mesesVol.length > 0) {
                 notificacoes.push({
-                    id: `relatorio_disp_${marcaId}_${mesesMidia.join("_")}`,
+                    id: `relatorio_disp_${marcaId}_${mesesVol.join("_")}`,
                     titulo: "Relatórios de Volumetria Atualizados",
-                    descricao: `Dados disponíveis para emissão: ${mesesMidia.join(", ")}.`,
+                    descricao: `Dados disponíveis para emissão: ${mesesVol.join(", ")}.`,
                     link: "indexRelatorio.html"
                 });
             }
@@ -289,10 +283,6 @@ async function carregarNotificacoesDaPlataforma(sessao) {
 
             for (const m of (marcas || [])) {
                 const mats = await apiRequest(`/marcas/${m.id}/materiais`, "GET").catch(() => []);
-                for (const itemPrazo of (mats || []).filter(x => x.tipoMaterial === "PRAZO_PESQUISA")) {
-                    apiRequest(`/materiais/${itemPrazo.id}`, "DELETE").catch(() => { });
-                }
-
                 const signatario = (mats || []).find(x => x.tipoMaterial === "DADOS_SIGNATARIO");
                 const pdfsContrato = (mats || []).filter(x => x.tipoMaterial === "CONTRATO");
                 const pdfConsolidado = pdfsContrato.find(x => x.status === "CONTRATO_CONSOLIDADO" || x.autorPerfil === "PATROCINADOR");
@@ -314,7 +304,11 @@ async function carregarNotificacoesDaPlataforma(sessao) {
                 }
 
                 const enviosPatrocinador = (mats || []).filter(
-                    x => x.autorPerfil === "PATROCINADOR" && x.tipoMaterial !== "CONTRATO" && x.tipoMaterial !== "DADOS_SIGNATARIO"
+                    x => x.autorPerfil === "PATROCINADOR" &&
+                        x.tipoMaterial !== "CONTRATO" &&
+                        x.tipoMaterial !== "DADOS_SIGNATARIO" &&
+                        x.tipoMaterial !== "DADOS_VOLUMETRIA" &&
+                        x.tipoMaterial !== "COBRANCA_CONTRATO"
                 );
                 if (enviosPatrocinador.length > 0) {
                     const ultimo = enviosPatrocinador[0];

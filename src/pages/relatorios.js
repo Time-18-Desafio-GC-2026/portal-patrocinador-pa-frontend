@@ -1,6 +1,5 @@
 ﻿const ORDEM_MESES = ["Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro"];
 const ORDEM_VEICULOS = ["Instagram", "X", "TikTok", "Rádio", "Jornais", "Televisão"];
-const STORAGE_PLANILHA_GERAL_KEY = "rbs_volumetria_por_marca_v3";
 
 const CORES_VEICULOS = {
     "Instagram": "#E1306C",
@@ -11,171 +10,122 @@ const CORES_VEICULOS = {
     "Televisão": "#101D4D"
 };
 
-const BASE_VEICULOS_PADRAO = {
-    "Instagram": [22, 78000, 61000],
-    "X": [15, 32000, 24000],
-    "TikTok": [19, 84000, 66000],
-    "Rádio": [28, 105000, 89000],
-    "Jornais": [10, 41000, 34000],
-    "Televisão": [14, 155000, 128000]
-};
-
-const PESOS_MES_PADRAO = {
-    "Outubro": 0.8,
-    "Novembro": 0.95,
-    "Dezembro": 1.15,
-    "Janeiro": 1.4,
-    "Fevereiro": 1.75
-};
-
-function normalizarChaveMarca(nome) {
-    return String(nome || "")
+function normalizarTexto(str) {
+    return String(str || "")
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .trim()
         .toLowerCase();
 }
 
-function lerCachePlanilhaImportada() {
-    try {
-        return JSON.parse(localStorage.getItem(STORAGE_PLANILHA_GERAL_KEY) || "{}");
-    } catch {
-        return {};
-    }
+function codificarMesParaBanco(itensMes) {
+    return ORDEM_VEICULOS.map(veic => {
+        const achado = (itensMes || []).find(i => i.veiculo === veic);
+        const v = achado ? Number(achado.veiculacoes || 0) : 0;
+        const vis = achado ? Number(achado.visualizacoes || 0) : 0;
+        const alc = achado ? Number(achado.alcance || 0) : 0;
+        return `${v},${vis},${alc}`;
+    }).join("|");
 }
 
-function salvarCachePlanilhaImportada(mapaPorChaveMarca) {
-    localStorage.setItem(STORAGE_PLANILHA_GERAL_KEY, JSON.stringify(mapaPorChaveMarca || {}));
-}
-
-function gerarDadosIndividuaisDaMarcaPadrao(marca, idxAlfabetico) {
-    const cotaUpper = String(marca?.cota || "").toUpperCase();
-    const fatorCota = cotaUpper === "MASTER" ? 1.8 : (cotaUpper === "SUB_COTA_G" ? 1.3 : 0.85);
-    const variacaoMarca = 1 + ((idxAlfabetico % 4) * 0.06);
-
-    const midiaMensal = [];
-    ORDEM_MESES.forEach(mes => {
-        const pesoM = PESOS_MES_PADRAO[mes] || 1;
-        ORDEM_VEICULOS.forEach(veiculo => {
-            const [vBase, visBase, alcBase] = BASE_VEICULOS_PADRAO[veiculo] || [15, 50000, 40000];
-            midiaMensal.push({
-                mes,
-                veiculo,
-                veiculacoes: Math.round(vBase * pesoM * fatorCota * variacaoMarca),
-                visualizacoes: Math.round(visBase * pesoM * fatorCota * variacaoMarca),
-                alcance: Math.round(alcBase * pesoM * fatorCota * variacaoMarca)
-            });
-        });
-    });
-
-    const ehMaster = cotaUpper === "MASTER";
-    const entrevistados = ehMaster ? 1260 : 0;
-    const alcanceAtivacao = ehMaster ? 51700 : 0;
-
-    return {
-        midiaMensal,
-        resumoAtivacao: { entrevistados, alcanceAtivacao },
-        demografia: ehMaster ? {
-            GENERO: [
-                { rotulo: "Feminino", percentual: 54, quantidade: Math.round(entrevistados * 0.54) },
-                { rotulo: "Masculino", percentual: 43, quantidade: Math.round(entrevistados * 0.43) },
-                { rotulo: "Não-binário / Outros", percentual: 3, quantidade: Math.round(entrevistados * 0.03) }
-            ],
-            IDADE: [
-                { rotulo: "18 a 24 anos", percentual: 42, quantidade: Math.round(entrevistados * 0.42) },
-                { rotulo: "25 a 34 anos", percentual: 35, quantidade: Math.round(entrevistados * 0.35) },
-                { rotulo: "35 a 44 anos", percentual: 15, quantidade: Math.round(entrevistados * 0.15) },
-                { rotulo: "45 anos ou mais", percentual: 8, quantidade: Math.round(entrevistados * 0.08) }
-            ],
-            PERFIL: [
-                { rotulo: "Já participou de edições anteriores", percentual: 68, quantidade: Math.round(entrevistados * 0.68) },
-                { rotulo: "Primeira vez no Planeta Atlântida", percentual: 32, quantidade: Math.round(entrevistados * 0.32) }
-            ]
-        } : { GENERO: [], IDADE: [], PERFIL: [] },
-        respostasPerguntas: ehMaster ? {
-            1: { sim: 92, nao: 8 },
-            2: { sim: 87, nao: 13 },
-            3: { sim: 95, nao: 5 }
-        } : {}
-    };
-}
-
-function obterDadosIndividuaisDaMarca(marca, todasMarcasOrdenadas) {
-    const cache = lerCachePlanilhaImportada();
-    const chave = normalizarChaveMarca(marca.nome);
-    if (cache[chave] && Array.isArray(cache[chave].midiaMensal) && cache[chave].midiaMensal.length > 0) {
-        return cache[chave];
-    }
-    const idx = Math.max(
-        0,
-        todasMarcasOrdenadas.findIndex(m => String(m.id) === String(marca.id) || normalizarChaveMarca(m.nome) === chave)
-    );
-    return gerarDadosIndividuaisDaMarcaPadrao(marca, idx);
-}
-
-function obterDadosConsolidadosDeTodasAsMarcas(todasMarcasOrdenadas) {
-    const mapaMesVeiculo = {};
-    let somaEntrevistados = 0;
-    let somaAlcanceAtivacao = 0;
-    let qtdMaster = 0;
-
-    todasMarcasOrdenadas.forEach(marca => {
-        const dadosMarca = obterDadosIndividuaisDaMarca(marca, todasMarcasOrdenadas);
-        (dadosMarca.midiaMensal || []).forEach(item => {
-            const k = `${item.mes}|${item.veiculo}`;
-            if (!mapaMesVeiculo[k]) {
-                mapaMesVeiculo[k] = {
-                    mes: item.mes,
-                    veiculo: item.veiculo,
-                    veiculacoes: 0,
-                    visualizacoes: 0,
-                    alcance: 0
-                };
-            }
-            mapaMesVeiculo[k].veiculacoes += Number(item.veiculacoes || 0);
-            mapaMesVeiculo[k].visualizacoes += Number(item.visualizacoes || 0);
-            mapaMesVeiculo[k].alcance += Number(item.alcance || 0);
-        });
-
-        if (String(marca.cota).toUpperCase() === "MASTER" && dadosMarca.resumoAtivacao?.entrevistados > 0) {
-            qtdMaster++;
-            somaEntrevistados += Number(dadosMarca.resumoAtivacao.entrevistados || 0);
-            somaAlcanceAtivacao += Number(dadosMarca.resumoAtivacao.alcanceAtivacao || 0);
+function decodificarMesDoBanco(mesNome, strCompacta) {
+    const blocos = String(strCompacta || "").split("|");
+    const resultado = [];
+    ORDEM_VEICULOS.forEach((veiculo, idx) => {
+        const partes = (blocos[idx] || "0,0,0").split(",").map(n => Number(n) || 0);
+        const [veiculacoes, visualizacoes, alcance] = partes;
+        if (veiculacoes > 0 || visualizacoes > 0 || alcance > 0) {
+            resultado.push({ mes: mesNome, veiculo, veiculacoes, visualizacoes, alcance });
         }
     });
+    return resultado;
+}
 
-    const entrevistadosTotal = somaEntrevistados || 1260;
-    const alcanceAtivTotal = somaAlcanceAtivacao || 51700;
+function codificarAtivacaoParaBanco(ativ) {
+    if (!ativ || !ativ.resumoAtivacao || !ativ.resumoAtivacao.entrevistados) return "";
+    const ent = Number(ativ.resumoAtivacao.entrevistados || 0);
+    const alc = Number(ativ.resumoAtivacao.alcanceAtivacao || 0);
+    const g = (ativ.demografia?.GENERO || []).map(x => Number(x.percentual || 0)).join(",");
+    const idd = (ativ.demografia?.IDADE || []).map(x => Number(x.percentual || 0)).join(",");
+    const pf = (ativ.demografia?.PERFIL || []).map(x => Number(x.percentual || 0)).join(",");
+    const p1 = `${ativ.respostasPerguntas?.[1]?.sim ?? 0},${ativ.respostasPerguntas?.[1]?.nao ?? 0}`;
+    const p2 = `${ativ.respostasPerguntas?.[2]?.sim ?? 0},${ativ.respostasPerguntas?.[2]?.nao ?? 0}`;
+    const p3 = `${ativ.respostasPerguntas?.[3]?.sim ?? 0},${ativ.respostasPerguntas?.[3]?.nao ?? 0}`;
+    return `${ent},${alc}|${g}|${idd}|${pf}|${p1}|${p2}|${p3}`;
+}
+
+function decodificarAtivacaoDoBanco(strCompacta) {
+    const padraoVazio = {
+        resumoAtivacao: { entrevistados: 0, alcanceAtivacao: 0 },
+        demografia: { GENERO: [], IDADE: [], PERFIL: [] },
+        respostasPerguntas: {}
+    };
+    if (!strCompacta || !String(strCompacta).includes("|")) return padraoVazio;
+
+    const partes = String(strCompacta).split("|");
+    const [ent, alc] = (partes[0] || "0,0").split(",").map(n => Number(n) || 0);
+    if (ent <= 0 && alc <= 0) return padraoVazio;
+
+    const [gFem, gMasc, gOut] = (partes[1] || "0,0,0").split(",").map(n => Number(n) || 0);
+    const [i18, i25, i35, i45] = (partes[2] || "0,0,0,0").split(",").map(n => Number(n) || 0);
+    const [pAnt, pPrim] = (partes[3] || "0,0").split(",").map(n => Number(n) || 0);
+    const [p1Sim, p1Nao] = (partes[4] || "0,0").split(",").map(n => Number(n) || 0);
+    const [p2Sim, p2Nao] = (partes[5] || "0,0").split(",").map(n => Number(n) || 0);
+    const [p3Sim, p3Nao] = (partes[6] || "0,0").split(",").map(n => Number(n) || 0);
 
     return {
-        midiaMensal: Object.values(mapaMesVeiculo),
-        resumoAtivacao: {
-            entrevistados: entrevistadosTotal,
-            alcanceAtivacao: alcanceAtivTotal
-        },
+        resumoAtivacao: { entrevistados: ent, alcanceAtivacao: alc },
         demografia: {
             GENERO: [
-                { rotulo: "Feminino", percentual: 54, quantidade: Math.round(entrevistadosTotal * 0.54) },
-                { rotulo: "Masculino", percentual: 43, quantidade: Math.round(entrevistadosTotal * 0.43) },
-                { rotulo: "Não-binário / Outros", percentual: 3, quantidade: Math.round(entrevistadosTotal * 0.03) }
+                { rotulo: "Feminino", percentual: gFem, quantidade: Math.round((ent * gFem) / 100) },
+                { rotulo: "Masculino", percentual: gMasc, quantidade: Math.round((ent * gMasc) / 100) },
+                { rotulo: "Não-binário / Outros", percentual: gOut, quantidade: Math.round((ent * gOut) / 100) }
             ],
             IDADE: [
-                { rotulo: "18 a 24 anos", percentual: 42, quantidade: Math.round(entrevistadosTotal * 0.42) },
-                { rotulo: "25 a 34 anos", percentual: 35, quantidade: Math.round(entrevistadosTotal * 0.35) },
-                { rotulo: "35 a 44 anos", percentual: 15, quantidade: Math.round(entrevistadosTotal * 0.15) },
-                { rotulo: "45 anos ou mais", percentual: 8, quantidade: Math.round(entrevistadosTotal * 0.08) }
+                { rotulo: "18 a 24 anos", percentual: i18, quantidade: Math.round((ent * i18) / 100) },
+                { rotulo: "25 a 34 anos", percentual: i25, quantidade: Math.round((ent * i25) / 100) },
+                { rotulo: "35 a 44 anos", percentual: i35, quantidade: Math.round((ent * i35) / 100) },
+                { rotulo: "45 anos ou mais", percentual: i45, quantidade: Math.round((ent * i45) / 100) }
             ],
             PERFIL: [
-                { rotulo: "Já participou de edições anteriores", percentual: 68, quantidade: Math.round(entrevistadosTotal * 0.68) },
-                { rotulo: "Primeira vez no Planeta Atlântida", percentual: 32, quantidade: Math.round(entrevistadosTotal * 0.32) }
+                { rotulo: "Já participou de edições anteriores", percentual: pAnt, quantidade: Math.round((ent * pAnt) / 100) },
+                { rotulo: "Primeira vez no Planeta Atlântida", percentual: pPrim, quantidade: Math.round((ent * pPrim) / 100) }
             ]
         },
         respostasPerguntas: {
-            1: { sim: 92, nao: 8 },
-            2: { sim: 87, nao: 13 },
-            3: { sim: 95, nao: 5 }
-        },
-        qtdMaster
+            1: { sim: p1Sim, nao: p1Nao },
+            2: { sim: p2Sim, nao: p2Nao },
+            3: { sim: p3Sim, nao: p3Nao }
+        }
+    };
+}
+
+function extrairVolumetriaDosMateriaisDoBanco(materiaisLista) {
+    const materiaisVol = (materiaisLista || []).filter(m => m.tipoMaterial === "DADOS_VOLUMETRIA");
+    const midiaMensal = [];
+    let ativacao = {
+        resumoAtivacao: { entrevistados: 0, alcanceAtivacao: 0 },
+        demografia: { GENERO: [], IDADE: [], PERFIL: [] },
+        respostasPerguntas: {}
+    };
+
+    ORDEM_MESES.forEach(mes => {
+        const regMes = materiaisVol.find(m => m.titulo === `VOL_MES:${mes}`);
+        if (regMes && regMes.descricao) {
+            midiaMensal.push(...decodificarMesDoBanco(mes, regMes.descricao));
+        }
+    });
+
+    const regAtiv = materiaisVol.find(m => m.titulo === "VOL_ATIVACAO:MASTER");
+    if (regAtiv && regAtiv.descricao) {
+        ativacao = decodificarAtivacaoDoBanco(regAtiv.descricao);
+    }
+
+    return {
+        midiaMensal,
+        resumoAtivacao: ativacao.resumoAtivacao,
+        demografia: ativacao.demografia,
+        respostasPerguntas: ativacao.respostasPerguntas
     };
 }
 
@@ -192,11 +142,26 @@ function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
 
     const listaMasterObj = baseMarcas.filter(m => String(m.cota).toUpperCase() === "MASTER");
     const mastersFinal = listaMasterObj.length > 0 ? listaMasterObj : baseMarcas.slice(0, 5);
-
     const esc = (str) => String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+    const baseExemploPlanilha = {
+        "Instagram": [22, 78000, 61000],
+        "X": [15, 32000, 24000],
+        "TikTok": [19, 84000, 66000],
+        "Rádio": [28, 105000, 89000],
+        "Jornais": [10, 41000, 34000],
+        "Televisão": [14, 155000, 128000]
+    };
+    const pesosExemploMes = {
+        "Outubro": 0.8,
+        "Novembro": 0.95,
+        "Dezembro": 1.15,
+        "Janeiro": 1.4,
+        "Fevereiro": 1.75
+    };
+
     function criarAbaMesXml(nomeMes) {
-        const pesoM = PESOS_MES_PADRAO[nomeMes] || 1;
+        const pesoM = pesosExemploMes[nomeMes] || 1;
         let rowsXml = `<Row ss:StyleID="Header"><Cell><Data ss:Type="String">Veiculo</Data></Cell><Cell><Data ss:Type="String">Metrica</Data></Cell>`;
         baseMarcas.forEach(m => {
             rowsXml += `<Cell><Data ss:Type="String">${esc(m.nome)}</Data></Cell>`;
@@ -206,7 +171,7 @@ function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
         const somaVeiculacoesPorMarca = new Array(baseMarcas.length).fill(0);
 
         ORDEM_VEICULOS.forEach(veiculo => {
-            const [vBase, visBase, alcBase] = BASE_VEICULOS_PADRAO[veiculo] || [15, 50000, 40000];
+            const [vBase, visBase, alcBase] = baseExemploPlanilha[veiculo] || [15, 50000, 40000];
             const metricas = [
                 ["Veiculações", vBase],
                 ["Visualizações", visBase],
@@ -307,10 +272,6 @@ function baixarPlanilhaExcelPadraoMultiAbas(marcas) {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-/**
- * Converte tanto planilhas XML SpreadsheetML (.xls geradas pelo sistema) quanto planilhas binárias (.xlsx/.xls)
- * em um mapa de abas -> lista de objetos de linha.
- */
 async function extrairAbasDaPlanilha(arquivo) {
     const buffer = await arquivo.arrayBuffer();
     const textoInicial = new TextDecoder("utf-8").decode(buffer.slice(0, 300));
@@ -395,6 +356,105 @@ document.addEventListener("DOMContentLoaded", async () => {
         return marcasCarregadas.find(m => String(m.id) === String(val)) || null;
     }
 
+    async function buscarDadosVolumetriaDaMarcaNoBanco(marcaId) {
+        const materiais = await apiRequest(`/marcas/${marcaId}/materiais`, "GET").catch(() => []);
+        return extrairVolumetriaDosMateriaisDoBanco(materiais);
+    }
+
+    async function buscarDadosConsolidadosDeTodasNoBanco() {
+        const mapaMesVeiculo = {};
+        let somaEntrevistados = 0;
+        let somaAlcanceAtivacao = 0;
+        let somaGen = [0, 0, 0];
+        let somaIdd = [0, 0, 0, 0];
+        let somaPerf = [0, 0];
+        let somaP1 = [0, 0];
+        let somaP2 = [0, 0];
+        let somaP3 = [0, 0];
+        let qtdMasterComDados = 0;
+
+        const listasPorMarca = await Promise.all(
+            marcasCarregadas.map(m => buscarDadosVolumetriaDaMarcaNoBanco(m.id))
+        );
+
+        listasPorMarca.forEach((dadosMarca, idx) => {
+            const marca = marcasCarregadas[idx];
+            (dadosMarca.midiaMensal || []).forEach(item => {
+                const k = `${item.mes}|${item.veiculo}`;
+                if (!mapaMesVeiculo[k]) {
+                    mapaMesVeiculo[k] = {
+                        mes: item.mes,
+                        veiculo: item.veiculo,
+                        veiculacoes: 0,
+                        visualizacoes: 0,
+                        alcance: 0
+                    };
+                }
+                mapaMesVeiculo[k].veiculacoes += Number(item.veiculacoes || 0);
+                mapaMesVeiculo[k].visualizacoes += Number(item.visualizacoes || 0);
+                mapaMesVeiculo[k].alcance += Number(item.alcance || 0);
+            });
+
+            if (String(marca?.cota).toUpperCase() === "MASTER" && dadosMarca.resumoAtivacao?.entrevistados > 0) {
+                qtdMasterComDados++;
+                somaEntrevistados += Number(dadosMarca.resumoAtivacao.entrevistados || 0);
+                somaAlcanceAtivacao += Number(dadosMarca.resumoAtivacao.alcanceAtivacao || 0);
+
+                (dadosMarca.demografia?.GENERO || []).forEach((g, i) => { somaGen[i] = (somaGen[i] || 0) + Number(g.percentual || 0); });
+                (dadosMarca.demografia?.IDADE || []).forEach((id, i) => { somaIdd[i] = (somaIdd[i] || 0) + Number(id.percentual || 0); });
+                (dadosMarca.demografia?.PERFIL || []).forEach((pf, i) => { somaPerf[i] = (somaPerf[i] || 0) + Number(pf.percentual || 0); });
+
+                somaP1[0] += Number(dadosMarca.respostasPerguntas?.[1]?.sim || 0);
+                somaP1[1] += Number(dadosMarca.respostasPerguntas?.[1]?.nao || 0);
+                somaP2[0] += Number(dadosMarca.respostasPerguntas?.[2]?.sim || 0);
+                somaP2[1] += Number(dadosMarca.respostasPerguntas?.[2]?.nao || 0);
+                somaP3[0] += Number(dadosMarca.respostasPerguntas?.[3]?.sim || 0);
+                somaP3[1] += Number(dadosMarca.respostasPerguntas?.[3]?.nao || 0);
+            }
+        });
+
+        const div = qtdMasterComDados || 1;
+        const gFem = Math.round(somaGen[0] / div);
+        const gMasc = Math.round(somaGen[1] / div);
+        const gOut = Math.round(somaGen[2] / div);
+        const i18 = Math.round(somaIdd[0] / div);
+        const i25 = Math.round(somaIdd[1] / div);
+        const i35 = Math.round(somaIdd[2] / div);
+        const i45 = Math.round(somaIdd[3] / div);
+        const pAnt = Math.round(somaPerf[0] / div);
+        const pPrim = Math.round(somaPerf[1] / div);
+
+        return {
+            midiaMensal: Object.values(mapaMesVeiculo),
+            resumoAtivacao: {
+                entrevistados: somaEntrevistados,
+                alcanceAtivacao: somaAlcanceAtivacao
+            },
+            demografia: qtdMasterComDados > 0 ? {
+                GENERO: [
+                    { rotulo: "Feminino", percentual: gFem, quantidade: Math.round((somaEntrevistados * gFem) / 100) },
+                    { rotulo: "Masculino", percentual: gMasc, quantidade: Math.round((somaEntrevistados * gMasc) / 100) },
+                    { rotulo: "Não-binário / Outros", percentual: gOut, quantidade: Math.round((somaEntrevistados * gOut) / 100) }
+                ],
+                IDADE: [
+                    { rotulo: "18 a 24 anos", percentual: i18, quantidade: Math.round((somaEntrevistados * i18) / 100) },
+                    { rotulo: "25 a 34 anos", percentual: i25, quantidade: Math.round((somaEntrevistados * i25) / 100) },
+                    { rotulo: "35 a 44 anos", percentual: i35, quantidade: Math.round((somaEntrevistados * i35) / 100) },
+                    { rotulo: "45 anos ou mais", percentual: i45, quantidade: Math.round((somaEntrevistados * i45) / 100) }
+                ],
+                PERFIL: [
+                    { rotulo: "Já participou de edições anteriores", percentual: pAnt, quantidade: Math.round((somaEntrevistados * pAnt) / 100) },
+                    { rotulo: "Primeira vez no Planeta Atlântida", percentual: pPrim, quantidade: Math.round((somaEntrevistados * pPrim) / 100) }
+                ]
+            } : { GENERO: [], IDADE: [], PERFIL: [] },
+            respostasPerguntas: qtdMasterComDados > 0 ? {
+                1: { sim: Math.round(somaP1[0] / div), nao: Math.round(somaP1[1] / div) },
+                2: { sim: Math.round(somaP2[0] / div), nao: Math.round(somaP2[1] / div) },
+                3: { sim: Math.round(somaP3[0] / div), nao: Math.round(somaP3[1] / div) }
+            } : {}
+        };
+    }
+
     function atualizarPermissaoTipoRelatorioPorCota() {
         const marca = obterMarcaSelecionadaObj();
         const ehMaster = marca && (marca.ehConsolidadoGeral || String(marca.cota).toUpperCase() === "MASTER");
@@ -415,40 +475,44 @@ document.addEventListener("DOMContentLoaded", async () => {
         const marca = obterMarcaSelecionadaObj();
         if (!marca || !alertaBanner) return;
 
-        const estruturado = marca.ehConsolidadoGeral
-            ? obterDadosConsolidadosDeTodasAsMarcas(marcasCarregadas)
-            : obterDadosIndividuaisDaMarca(marca, marcasCarregadas);
+        try {
+            const estruturado = marca.ehConsolidadoGeral
+                ? await buscarDadosConsolidadosDeTodasNoBanco()
+                : await buscarDadosVolumetriaDaMarcaNoBanco(marca.id);
 
-        const mesesDisponiveis = [...new Set((estruturado.midiaMensal || []).map(i => i.mes))];
-        if (mesesDisponiveis.length === 0) {
+            const mesesDisponiveis = [...new Set((estruturado.midiaMensal || []).map(i => i.mes))];
+            if (mesesDisponiveis.length === 0) {
+                alertaBanner.hidden = true;
+                return;
+            }
+
+            alertaBanner.hidden = false;
+            const ehMaster = marca.ehConsolidadoGeral || String(marca.cota).toUpperCase() === "MASTER";
+            alertaTitulo.textContent = marca.ehConsolidadoGeral
+                ? "Notificação de Dados Disponíveis: Todas as Marcas (Consolidado no Banco)"
+                : `Notificação de Dados Disponíveis: ${marca.nome}`;
+            alertaDetalhe.textContent = marca.ehConsolidadoGeral
+                ? `Soma consolidada das marcas patrocinadoras salva no banco (${mesesDisponiveis.length} mês/meses).`
+                : `Dados da última planilha importada salvos no banco para ${mesesDisponiveis.length} mês(es) da campanha.`;
+
+            alertaBadges.replaceChildren();
+            ORDEM_MESES.filter(m => mesesDisponiveis.includes(m)).forEach(mes => {
+                const span = document.createElement("span");
+                span.className = "report-month-badge";
+                span.textContent = `${mes}: Disponível`;
+                alertaBadges.appendChild(span);
+            });
+
+            if (ehMaster && estruturado.resumoAtivacao.entrevistados > 0) {
+                const spanAtiv = document.createElement("span");
+                spanAtiv.className = "report-month-badge";
+                spanAtiv.style.background = "#eef2ff";
+                spanAtiv.style.color = "#101d4d";
+                spanAtiv.textContent = "Pesquisa de Ativação: Disponível";
+                alertaBadges.appendChild(spanAtiv);
+            }
+        } catch {
             alertaBanner.hidden = true;
-            return;
-        }
-
-        alertaBanner.hidden = false;
-        const ehMaster = marca.ehConsolidadoGeral || String(marca.cota).toUpperCase() === "MASTER";
-        alertaTitulo.textContent = marca.ehConsolidadoGeral
-            ? "Notificação de Dados Disponíveis: Todas as Marcas (Consolidado Planeta Atlântida)"
-            : `Notificação de Dados Disponíveis: ${marca.nome}`;
-        alertaDetalhe.textContent = marca.ehConsolidadoGeral
-            ? `Soma consolidada das ${marcasCarregadas.length} marcas patrocinadoras (${mesesDisponiveis.length} meses da campanha + Pesquisa de Ativação).`
-            : `Dados individuais auditados de ${marca.nome} disponíveis para ${mesesDisponiveis.length} mês(es) da campanha${ehMaster ? " + Pesquisa de Ativação Master" : ""}.`;
-
-        alertaBadges.replaceChildren();
-        ORDEM_MESES.filter(m => mesesDisponiveis.includes(m)).forEach(mes => {
-            const span = document.createElement("span");
-            span.className = "report-month-badge";
-            span.textContent = `${mes}: Disponível`;
-            alertaBadges.appendChild(span);
-        });
-
-        if (ehMaster && estruturado.resumoAtivacao.entrevistados > 0) {
-            const spanAtiv = document.createElement("span");
-            spanAtiv.className = "report-month-badge";
-            spanAtiv.style.background = "#eef2ff";
-            spanAtiv.style.color = "#101d4d";
-            spanAtiv.textContent = "Pesquisa de Ativação: Disponível";
-            alertaBadges.appendChild(spanAtiv);
         }
     }
 
@@ -528,24 +592,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!arquivo) return;
 
         btnImportarGeral.disabled = true;
-        btnImportarGeral.textContent = "Importando...";
+        btnImportarGeral.textContent = "Salvando no Banco...";
 
         try {
             const abasExtraidas = await extrairAbasDaPlanilha(arquivo);
 
             function encontrarMarcaPorColuna(nomeColuna) {
-                const alvo = normalizarChaveMarca(nomeColuna);
+                const alvo = normalizarTexto(nomeColuna);
                 if (!alvo || alvo.includes("veic") || alvo.includes("metr") || alvo.includes("categ") || alvo.includes("unnamed")) {
                     return null;
                 }
                 return marcasCarregadas.find(m => {
-                    const nm = normalizarChaveMarca(m.nome);
+                    const nm = normalizarTexto(m.nome);
                     return nm === alvo || nm.includes(alvo) || alvo.includes(nm);
                 }) || null;
             }
 
             const normalizarVeiculo = (v) => {
-                const limpo = normalizarChaveMarca(v);
+                const limpo = normalizarTexto(v);
                 if (!limpo || limpo.includes("total") || limpo.includes("soma")) return null;
                 if (limpo.includes("insta")) return "Instagram";
                 if (limpo === "x" || limpo.includes("twitter")) return "X";
@@ -556,21 +620,41 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return null;
             };
 
-            const novoCachePorMarca = {};
-            marcasCarregadas.forEach((m, idx) => {
-                const chaveM = normalizarChaveMarca(m.nome);
-                const padraoM = gerarDadosIndividuaisDaMarcaPadrao(m, idx);
-                novoCachePorMarca[chaveM] = {
-                    midiaMensal: [],
-                    resumoAtivacao: padraoM.resumoAtivacao,
-                    demografia: padraoM.demografia,
-                    respostasPerguntas: padraoM.respostasPerguntas
+            const dadosExtraidosPorMarcaId = {};
+            marcasCarregadas.forEach(m => {
+                dadosExtraidosPorMarcaId[m.id] = {
+                    porMes: {},
+                    ativacao: {
+                        resumoAtivacao: { entrevistados: 0, alcanceAtivacao: 0 },
+                        demografia: {
+                            GENERO: [
+                                { rotulo: "Feminino", percentual: 0 },
+                                { rotulo: "Masculino", percentual: 0 },
+                                { rotulo: "Não-binário / Outros", percentual: 0 }
+                            ],
+                            IDADE: [
+                                { rotulo: "18 a 24 anos", percentual: 0 },
+                                { rotulo: "25 a 34 anos", percentual: 0 },
+                                { rotulo: "35 a 44 anos", percentual: 0 },
+                                { rotulo: "45 anos ou mais", percentual: 0 }
+                            ],
+                            PERFIL: [
+                                { rotulo: "Já participou de edições anteriores", percentual: 0 },
+                                { rotulo: "Primeira vez no Planeta Atlântida", percentual: 0 }
+                            ]
+                        },
+                        respostasPerguntas: {
+                            1: { sim: 0, nao: 0 },
+                            2: { sim: 0, nao: 0 },
+                            3: { sim: 0, nao: 0 }
+                        }
+                    }
                 };
             });
 
             ORDEM_MESES.forEach(mes => {
                 const nomeAba = Object.keys(abasExtraidas).find(
-                    s => normalizarChaveMarca(s) === normalizarChaveMarca(mes)
+                    s => normalizarTexto(s) === normalizarTexto(mes)
                 );
                 if (!nomeAba) return;
 
@@ -579,14 +663,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 linhas.forEach(row => {
                     const chaves = Object.keys(row);
-                    const colVeiculo = chaves.find(k => normalizarChaveMarca(k).includes("veic")) || chaves[0];
-                    const colMetrica = chaves.find(k => normalizarChaveMarca(k).includes("metr")) || chaves[1];
+                    const colVeiculo = chaves.find(k => normalizarTexto(k).includes("veic")) || chaves[0];
+                    const colMetrica = chaves.find(k => normalizarTexto(k).includes("metr")) || chaves[1];
                     if (!colVeiculo || !colMetrica) return;
 
                     const veiculoPadrao = normalizarVeiculo(row[colVeiculo]);
                     if (!veiculoPadrao) return;
 
-                    const metricaStr = normalizarChaveMarca(row[colMetrica]);
+                    const metricaStr = normalizarTexto(row[colMetrica]);
                     let campoMetrica = null;
                     if (metricaStr.includes("veic")) campoMetrica = "veiculacoes";
                     else if (metricaStr.includes("visu")) campoMetrica = "visualizacoes";
@@ -598,15 +682,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                         const marca = encontrarMarcaPorColuna(col);
                         if (!marca) return;
 
-                        const chaveMarca = normalizarChaveMarca(marca.nome);
                         const valorLimpo = String(row[col] ?? "").replace(/\./g, "").replace(",", ".").trim();
                         const num = Number(valorLimpo);
-                        if (Number.isNaN(num) || num <= 0) return;
+                        if (Number.isNaN(num) || num < 0) return;
 
-                        const chaveItem = `${chaveMarca}|${mes}|${veiculoPadrao}`;
+                        const chaveItem = `${marca.id}|${veiculoPadrao}`;
                         if (!acumuladorMes[chaveItem]) {
                             acumuladorMes[chaveItem] = {
-                                chaveMarca,
+                                marcaId: marca.id,
                                 mes,
                                 veiculo: veiculoPadrao,
                                 veiculacoes: 0,
@@ -619,32 +702,107 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
 
                 Object.values(acumuladorMes).forEach(item => {
-                    if (novoCachePorMarca[item.chaveMarca]) {
-                        novoCachePorMarca[item.chaveMarca].midiaMensal.push({
-                            mes: item.mes,
-                            veiculo: item.veiculo,
-                            veiculacoes: item.veiculacoes,
-                            visualizacoes: item.visualizacoes,
-                            alcance: item.alcance
-                        });
+                    if (!dadosExtraidosPorMarcaId[item.marcaId].porMes[mes]) {
+                        dadosExtraidosPorMarcaId[item.marcaId].porMes[mes] = [];
                     }
+                    dadosExtraidosPorMarcaId[item.marcaId].porMes[mes].push(item);
                 });
             });
 
-            const marcasAtualizadas = [];
-            marcasCarregadas.forEach((m, idx) => {
-                const chaveM = normalizarChaveMarca(m.nome);
-                if (!novoCachePorMarca[chaveM] || novoCachePorMarca[chaveM].midiaMensal.length === 0) {
-                    novoCachePorMarca[chaveM] = gerarDadosIndividuaisDaMarcaPadrao(m, idx);
-                }
-                marcasAtualizadas.push(m.nome);
-            });
+            const nomeAbaAtivacao = Object.keys(abasExtraidas).find(
+                s => normalizarTexto(s).includes("ativacao")
+            );
+            if (nomeAbaAtivacao) {
+                const linhasAtiv = abasExtraidas[nomeAbaAtivacao] || [];
+                linhasAtiv.forEach(row => {
+                    const chaves = Object.keys(row);
+                    const colCat = chaves.find(k => normalizarTexto(k).includes("categ")) || chaves[0];
+                    const colMet = chaves.find(k => normalizarTexto(k).includes("metr")) || chaves[1];
+                    if (!colCat || !colMet) return;
 
-            salvarCachePlanilhaImportada(novoCachePorMarca);
+                    const cat = normalizarTexto(row[colCat]);
+                    const met = normalizarTexto(row[colMet]);
+
+                    chaves.forEach(col => {
+                        if (col === colCat || col === colMet) return;
+                        const marca = encontrarMarcaPorColuna(col);
+                        if (!marca) return;
+
+                        const num = Number(String(row[col] ?? "").replace(/\./g, "").replace(",", ".").trim());
+                        if (Number.isNaN(num)) return;
+
+                        const alvoAtiv = dadosExtraidosPorMarcaId[marca.id].ativacao;
+                        if (cat.includes("resumo") && met.includes("entrevistado")) alvoAtiv.resumoAtivacao.entrevistados = num;
+                        else if (cat.includes("resumo") && met.includes("alcance")) alvoAtiv.resumoAtivacao.alcanceAtivacao = num;
+                        else if (cat.includes("genero") && met.includes("femin")) alvoAtiv.demografia.GENERO[0].percentual = num;
+                        else if (cat.includes("genero") && met.includes("mascul")) alvoAtiv.demografia.GENERO[1].percentual = num;
+                        else if (cat.includes("genero")) alvoAtiv.demografia.GENERO[2].percentual = num;
+                        else if (cat.includes("idade") && met.includes("18")) alvoAtiv.demografia.IDADE[0].percentual = num;
+                        else if (cat.includes("idade") && met.includes("25")) alvoAtiv.demografia.IDADE[1].percentual = num;
+                        else if (cat.includes("idade") && met.includes("35")) alvoAtiv.demografia.IDADE[2].percentual = num;
+                        else if (cat.includes("idade") && met.includes("45")) alvoAtiv.demografia.IDADE[3].percentual = num;
+                        else if (cat.includes("perfil") && met.includes("ja")) alvoAtiv.demografia.PERFIL[0].percentual = num;
+                        else if (cat.includes("perfil") && met.includes("primeira")) alvoAtiv.demografia.PERFIL[1].percentual = num;
+                        else if (cat.includes("pergunta 1") && met.includes("sim")) alvoAtiv.respostasPerguntas[1].sim = num;
+                        else if (cat.includes("pergunta 1") && met.includes("nao")) alvoAtiv.respostasPerguntas[1].nao = num;
+                        else if (cat.includes("pergunta 2") && met.includes("sim")) alvoAtiv.respostasPerguntas[2].sim = num;
+                        else if (cat.includes("pergunta 2") && met.includes("nao")) alvoAtiv.respostasPerguntas[2].nao = num;
+                        else if (cat.includes("pergunta 3") && met.includes("sim")) alvoAtiv.respostasPerguntas[3].sim = num;
+                        else if (cat.includes("pergunta 3") && met.includes("nao")) alvoAtiv.respostasPerguntas[3].nao = num;
+                    });
+                });
+            }
+
+            const nomesSalvosNoBanco = [];
+            for (const marca of marcasCarregadas) {
+                const pacoteMarca = dadosExtraidosPorMarcaId[marca.id];
+                const mesesExtraidos = Object.keys(pacoteMarca.porMes);
+                if (mesesExtraidos.length === 0) continue;
+
+                const materiaisAtuais = await apiRequest(`/marcas/${marca.id}/materiais`, "GET").catch(() => []);
+                const antigosVolumetria = (materiaisAtuais || []).filter(m => m.tipoMaterial === "DADOS_VOLUMETRIA");
+
+                if (antigosVolumetria.length > 0) {
+                    await Promise.all(
+                        antigosVolumetria.map(matAntigo =>
+                            apiRequest(`/materiais/${matAntigo.id}`, "DELETE").catch(() => { })
+                        )
+                    );
+                }
+
+                for (const mes of mesesExtraidos) {
+                    const strMes = codificarMesParaBanco(pacoteMarca.porMes[mes]);
+                    await apiUploadMaterial(marca.id, {
+                        titulo: `VOL_MES:${mes}`,
+                        descricao: strMes,
+                        abaDestino: "ABA_7_CONTRATO",
+                        tipoMaterial: "DADOS_VOLUMETRIA",
+                        caminhoStorage: null,
+                        urlExterna: "https://portal.rbs.com.br/volumetria"
+                    }, null);
+                }
+
+                if (String(marca.cota).toUpperCase() === "MASTER" && pacoteMarca.ativacao.resumoAtivacao.entrevistados > 0) {
+                    const strAtiv = codificarAtivacaoParaBanco(pacoteMarca.ativacao);
+                    if (strAtiv) {
+                        await apiUploadMaterial(marca.id, {
+                            titulo: "VOL_ATIVACAO:MASTER",
+                            descricao: strAtiv,
+                            abaDestino: "ABA_7_CONTRATO",
+                            tipoMaterial: "DADOS_VOLUMETRIA",
+                            caminhoStorage: null,
+                            urlExterna: "https://portal.rbs.com.br/volumetria"
+                        }, null);
+                    }
+                }
+
+                nomesSalvosNoBanco.push(marca.nome);
+            }
+
             await atualizarAlertaDisponibilidadeDaMarca();
-            alert(`Planilha Geral importada com sucesso! Os indicadores individuais foram separados por marca para: ${marcasAtualizadas.join(", ")}.`);
+            alert(`Planilha processada e salva no banco de dados! As planilhas anteriores foram substituídas e os novos dados estão prontos para: ${nomesSalvosNoBanco.join(", ")}.`);
         } catch (erro) {
-            alert(erro.message || "Erro ao processar a planilha geral.");
+            alert(erro.message || "Erro ao processar e salvar a planilha no banco de dados.");
         } finally {
             btnImportarGeral.disabled = false;
             btnImportarGeral.textContent = "Importar Planilha Geral";
@@ -700,7 +858,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             let dados = null;
 
             if (ehConsolidadoTodas) {
-                dados = obterDadosConsolidadosDeTodasAsMarcas(marcasCarregadas);
+                dados = await buscarDadosConsolidadosDeTodasNoBanco();
                 if (marcasCarregadas[0]?.id) {
                     await apiRequest(`/marcas/${marcasCarregadas[0].id}/relatorio-consolidado`, "GET").catch(() => null);
                 }
@@ -716,12 +874,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return;
                 }
 
-                dados = obterDadosIndividuaisDaMarca(
-                    { id: valorSelecionado, nome: nomeExibicaoMarca, cota: cotaExibicao },
-                    marcasCarregadas
-                );
-
                 const materiais = relatorio.materiaisEntregues || [];
+                dados = extrairVolumetriaDosMateriaisDoBanco(materiais);
+
                 const fotoMat = materiais.find(m => m.tipoMaterial === "FOTO_EMPRESA");
                 logoUrl = fotoMat ? (fotoMat.caminhoStorage || fotoMat.urlExterna) : "";
                 comprovacoesMidia = materiais.filter(
@@ -729,7 +884,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                         m.tipoMaterial !== "PLANO_COMERCIAL" &&
                         m.tipoMaterial !== "CONTRATO" &&
                         m.tipoMaterial !== "DADOS_SIGNATARIO" &&
-                        m.tipoMaterial !== "PRAZO_PESQUISA"
+                        m.tipoMaterial !== "PRAZO_PESQUISA" &&
+                        m.tipoMaterial !== "DADOS_VOLUMETRIA" &&
+                        m.tipoMaterial !== "COBRANCA_CONTRATO"
                 );
                 perguntasCadastradas = relatorio.perguntasPesquisa || [];
             }
@@ -741,9 +898,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (tipoRelatorio !== "ATIVACAO_EVENTO" && registrosMidiaFiltrados.length === 0) {
                 summary.innerHTML = `
                     <div style="padding: 1.25rem; border-radius: 8px; background: #ffffff; border: 1px solid #b42318; color: #1e293b;">
-                        <strong style="color: #b42318; font-size: 1rem;">Sem dados de veiculação para ${nomeExibicaoMarca}</strong>
+                        <strong style="color: #b42318; font-size: 1rem;">Nenhuma planilha importada no banco para ${nomeExibicaoMarca}</strong>
                         <p style="margin: 0.5rem 0 0; font-size: 0.92rem;">
-                            Não há registros de volumetria para os meses/veículos selecionados.
+                            A Administração RBS ainda não importou a Planilha Geral atualizada ou não há dados para os meses/veículos selecionados.
                         </p>
                     </div>
                 `;
@@ -796,6 +953,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             const mostrarBlocoAtivacao = ehMaster && (tipoRelatorio === "ATIVACAO_EVENTO" || tipoRelatorio === "FINAL_CONSOLIDADO");
             const mostrarComprovacoes = tipoRelatorio === "FINAL_CONSOLIDADO" && comprovacoesMidia.length > 0;
 
+            const tdNumStyle = "text-align: right; font-variant-numeric: tabular-nums; color: #0f172a; font-weight: 600;";
+            const thNumStyle = "text-align: right; color: #ffffff;";
+
             let htmlSecaoMidia = "";
             if (mostrarBlocoMidia && mesesComDados.length > 0) {
                 const maxVisMes = Math.max(...mesesComDados.map(([, o]) => o.subVisualizacoes), 1);
@@ -841,18 +1001,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <tr>
                                 <td>${idx === 0 ? `<strong>${mes}</strong>` : ""}</td>
                                 <td>${item.veiculo}</td>
-                                <td class="num">${item.veiculacoes.toLocaleString("pt-BR")}</td>
-                                <td class="num">${item.visualizacoes.toLocaleString("pt-BR")}</td>
-                                <td class="num">${item.alcance.toLocaleString("pt-BR")}</td>
+                                <td style="${tdNumStyle}">${item.veiculacoes.toLocaleString("pt-BR")}</td>
+                                <td style="${tdNumStyle}">${item.visualizacoes.toLocaleString("pt-BR")}</td>
+                                <td style="${tdNumStyle}">${item.alcance.toLocaleString("pt-BR")}</td>
                             </tr>
                         `;
                     });
                     linhasTabelaMensal += `
                         <tr class="subtotal-row">
                             <td colspan="2">Subtotal: ${mes}</td>
-                            <td class="num">${obj.subVeiculacoes.toLocaleString("pt-BR")}</td>
-                            <td class="num">${obj.subVisualizacoes.toLocaleString("pt-BR")}</td>
-                            <td class="num">${obj.subAlcance.toLocaleString("pt-BR")}</td>
+                            <td style="${tdNumStyle} font-weight: 800;">${obj.subVeiculacoes.toLocaleString("pt-BR")}</td>
+                            <td style="${tdNumStyle} font-weight: 800;">${obj.subVisualizacoes.toLocaleString("pt-BR")}</td>
+                            <td style="${tdNumStyle} font-weight: 800;">${obj.subAlcance.toLocaleString("pt-BR")}</td>
                         </tr>
                     `;
                 });
@@ -860,9 +1020,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 linhasTabelaMensal += `
                     <tr class="grand-total-row">
                         <td colspan="2">SOMA TOTAL ACUMULADA (${mesesComDados.map(([m]) => m).join(", ")})</td>
-                        <td class="num">${totalGeralVeiculacoes.toLocaleString("pt-BR")}</td>
-                        <td class="num">${totalGeralVisualizacoes.toLocaleString("pt-BR")}</td>
-                        <td class="num">${totalGeralAlcance.toLocaleString("pt-BR")}</td>
+                        <td style="${tdNumStyle} font-weight: 800;">${totalGeralVeiculacoes.toLocaleString("pt-BR")}</td>
+                        <td style="${tdNumStyle} font-weight: 800;">${totalGeralVisualizacoes.toLocaleString("pt-BR")}</td>
+                        <td style="${tdNumStyle} font-weight: 800;">${totalGeralAlcance.toLocaleString("pt-BR")}</td>
                     </tr>
                 `;
 
@@ -903,14 +1063,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     <div class="pbi-card" style="margin-bottom: 14px;">
                         <h4 class="pbi-card-title">Matriz de Volumetria Mensal e Acumulado Geral</h4>
-                        <table class="pbi-table">
+                        <table class="pbi-table" style="width: 100%; table-layout: fixed;">
                             <thead>
                                 <tr>
-                                    <th>Mês da Campanha</th>
-                                    <th>Meio de Veiculação</th>
-                                    <th class="num">Veiculações</th>
-                                    <th class="num">Visualizações</th>
-                                    <th class="num">Alcance</th>
+                                    <th style="width: 22%;">Mês da Campanha</th>
+                                    <th style="width: 24%;">Meio de Veiculação</th>
+                                    <th style="width: 18%; ${thNumStyle}">Veiculações</th>
+                                    <th style="width: 18%; ${thNumStyle}">Visualizações</th>
+                                    <th style="width: 18%; ${thNumStyle}">Alcance</th>
                                 </tr>
                             </thead>
                             <tbody>${linhasTabelaMensal}</tbody>
@@ -932,7 +1092,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 for (let i = 1; i <= 3; i++) {
                     const pergObj = perguntasCadastradas.find(p => Number(p.numeroPergunta) === i);
                     const textoPergunta = pergObj ? pergObj.textoPergunta : perguntasPadraoMaster[i - 1];
-                    const resp = dados.respostasPerguntas[i] || { sim: 90, nao: 10 };
+                    const resp = dados.respostasPerguntas[i] || { sim: 0, nao: 0 };
                     const qtdSim = Math.round((dados.resumoAtivacao.entrevistados * resp.sim) / 100);
                     const qtdNao = dados.resumoAtivacao.entrevistados - qtdSim;
 
@@ -1127,7 +1287,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .pbi-table { width: 100%; border-collapse: collapse; font-size: 10px; }
                     .pbi-table th, .pbi-table td { border: 1px solid #cbd5e1; padding: 4px 8px; text-align: left; }
                     .pbi-table th { background: #101d4d; color: #ffffff; }
-                    .pbi-table td.num, .pbi-table th.num { text-align: right; }
                     .pbi-table tr.subtotal-row { background: #f1f5f9; font-weight: bold; }
                     .pbi-table tr.grand-total-row { background: #fff0df; font-weight: bold; border-top: 2px solid #f47b20; }
                 </style>

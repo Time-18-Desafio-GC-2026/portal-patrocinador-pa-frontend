@@ -254,7 +254,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
             const temSignatario = Boolean(estado.signatario?.nome);
             const infoSignatario = temSignatario
-                ? `<strong>Representante Legal:</strong> ${estado.signatario.nome} — <strong>Cargo:</strong> ${estado.signatario.cargo}`
+                ? `<strong>Representante Legal:</strong> ${estado.signatario.nome} - <strong>Cargo:</strong> ${estado.signatario.cargo}`
                 : `<em style="color: #b42318;">O patrocinador ainda não preencheu o nome e cargo de quem assinará o contrato.</em>`;
 
             const urlPdf = estado.pdfAtivo ? (estado.pdfAtivo.caminhoStorage || estado.pdfAtivo.urlExterna) : "";

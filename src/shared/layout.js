@@ -46,7 +46,7 @@ function verificarEExibirModalPrimeiroAcesso(sessao) {
     modal.innerHTML = `
         <div class="form-header">
             <div>
-                <h3>Primeiro Acesso — Segurança Obrigatória</h3>
+                <h3>Primeiro Acesso: Segurança Obrigatória</h3>
                 <p>Por segurança, personalize seu nome de exibição e substitua a senha padrão inicial antes de utilizar a plataforma.</p>
             </div>
         </div>
@@ -230,7 +230,7 @@ async function carregarNotificacoesDaPlataforma(sessao) {
                 notificacoes.push({
                     id: `midia_rbs_${m.id}`,
                     titulo: "Novo material publicado pela RBS",
-                    descricao: `${m.titulo}${m.descricao ? " — " + m.descricao : ""}`,
+                    descricao: `${m.titulo}${m.descricao ? ": " + m.descricao : ""}`,
                     link: "indexPatrocinador.html"
                 });
             });

@@ -489,10 +489,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             alertaBanner.hidden = false;
             const ehMaster = marca.ehConsolidadoGeral || String(marca.cota).toUpperCase() === "MASTER";
             alertaTitulo.textContent = marca.ehConsolidadoGeral
-                ? "Notificação de Dados Disponíveis: Todas as Marcas (Consolidado no Banco)"
+                ? "Notificação de Dados Disponíveis: Planeta Atlântida (Geral)"
                 : `Notificação de Dados Disponíveis: ${marca.nome}`;
             alertaDetalhe.textContent = marca.ehConsolidadoGeral
-                ? `Soma consolidada das marcas patrocinadoras salva no banco (${mesesDisponiveis.length} mês/meses).`
+                ? `Soma geral das marcas patrocinadoras salva no banco (${mesesDisponiveis.length} mês/meses).`
                 : `Dados da última planilha importada salvos no banco para ${mesesDisponiveis.length} mês(es) da campanha.`;
 
             alertaBadges.replaceChildren();
@@ -849,8 +849,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         try {
             const ehConsolidadoTodas = valorSelecionado === "TODAS";
-            let nomeExibicaoMarca = "Planeta Atlântida (Todas as Marcas)";
-            let cotaExibicao = "CONSOLIDADO GERAL";
+            let nomeExibicaoMarca = "Planeta Atlântida";
+            let cotaExibicao = "GERAL";
             let ehMaster = true;
             let logoUrl = "../assets/img/LogoPlanetaOrange.png";
             let comprovacoesMidia = [];
@@ -1150,11 +1150,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </div>
                     </div>
 
-                    <div class="pbi-card" style="margin-bottom: 14px;">
-                        <h4 class="pbi-card-title">Resultado das 3 Perguntas Personalizadas da Pesquisa de Ativação</h4>
-                        ${htmlPerguntasMaster}
-                    </div>
-                `;
+              
+                    ${!ehConsolidadoTodas ? `
+                        <div class="pbi-card" style="margin-bottom: 14px;">
+                            <h4 class="pbi-card-title">Resultado das 3 Perguntas Personalizadas da Pesquisa de Ativação</h4>
+                            ${htmlPerguntasMaster}
+                        </div>
+                        ` : ""}
+                    `;
             }
 
             let htmlSecaoComprovacoes = "";
@@ -1162,36 +1165,36 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const linhasComp = comprovacoesMidia.map(m => {
                     const dataStr = m.criadoEm ? new Date(m.criadoEm).toLocaleDateString("pt-BR") : "-";
                     return `
-                        <tr>
-                            <td><strong>${m.titulo}</strong></td>
-                            <td>${m.tipoMaterial === "LINK_POST" ? (m.urlExterna || m.descricao) : (m.descricao || "Arquivo Comprobatório")}</td>
-                            <td>${dataStr}</td>
-                        </tr>
-                    `;
+                            <tr>
+                                <td><strong>${m.titulo}</strong></td>
+                                <td>${m.tipoMaterial === "LINK_POST" ? (m.urlExterna || m.descricao) : (m.descricao || "Arquivo Comprobatório")}</td>
+                                <td>${dataStr}</td>
+                            </tr>
+                        `;
                 }).join("");
 
                 htmlSecaoComprovacoes = `
-                    <div class="pbi-card">
-                        <h4 class="pbi-card-title">Comprovações de Veiculação e Materiais Registrados</h4>
-                        <table class="pbi-table">
-                            <thead>
-                                <tr>
-                                    <th>Título / Identificação</th>
-                                    <th>Referência / Link de Comprovação</th>
-                                    <th>Data de Registro</th>
-                                </tr>
-                            </thead>
-                            <tbody>${linhasComp}</tbody>
-                        </table>
-                    </div>
-                `;
+                        <div class="pbi-card">
+                            <h4 class="pbi-card-title">Comprovações de Veiculação e Materiais Registrados</h4>
+                            <table class="pbi-table">
+                                <thead>
+                                    <tr>
+                                        <th>Título / Identificação</th>
+                                        <th>Referência / Link de Comprovação</th>
+                                        <th>Data de Registro</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${linhasComp}</tbody>
+                            </table>
+                        </div>
+                    `;
             }
 
             const mapTitulos = {
                 "VOLUMETRIA_MIDIA": `Relatório de Volumetria de Entrega e Impacto ${nomeExibicaoMarca}`,
                 "ATIVACAO_EVENTO": `Relatório de Ativações do Evento ${nomeExibicaoMarca}`,
                 "FINAL_CONSOLIDADO": ehConsolidadoTodas
-                    ? `Relatório Final Consolidado ${nomeExibicaoMarca}`
+                    ? "Relatório Final Planeta Atlântida"
                     : `Relatório Final Patrocinador ${nomeExibicaoMarca}`
             };
             const tituloRelatorio = mapTitulos[tipoRelatorio] || `Relatório ${nomeExibicaoMarca}`;
